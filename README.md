@@ -1,8 +1,17 @@
 # DataCaches.jl
 
-A lightweight, file-backed key-value cache for Julia — designed for workflows
+A lightweight, file-backed key-value cache for Julia for workflows
 that make expensive function calls (remote API queries, long-running computations)
 and need results to survive across Julia sessions.
+
+Major use-case for me is in teaching workshops or courses in which remote databases are queried frequently.
+Many large numbers of people almost simultaneously hitting database multiple times may be an issue, and in most cases
+most individuals but especially the instructors are running the same queries over and over again.
+Memoizing the function calls to the database and caching the data to disk reduces most of this resource stress significantly.
+In more extreme circumstances, e.g. teaching in conditions where network access is
+slow, unreliable, or just not available, the caches can be distributed on disk or as part of the workshop materials.
+One of the key design features is that client code can run without little to (in auto mode) no modification, so the
+cache mechanisms do not pollute the syntax and presentation of primary codebase being taught or run.
 
 Three levels of caching are provided, from manual to fully automatic:
 
