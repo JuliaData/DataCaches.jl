@@ -157,7 +157,7 @@ dc = DataCache(joinpath(homedir(), ".datacaches", "biodiversity"))
 set_default_filecache!(dc)
 
 occs = @filecache GBIF2.occurrence_search(taxonKey = 212, limit = 300)
-# Next session: same call returns from disk, no network request
+# Next session: same call with `@filecache` returns from disk, no network request
 ```
 
 #### `@memcache` — deduplicate within a session
@@ -457,4 +457,4 @@ with no overhead.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATACACHES_DEFAULT_STORE` | `~/.cache/DataCaches/_DEFAULT` | Root directory used by `DataCache()` (no-argument constructor) |
+| `DATACACHES_DEFAULT_STORE` | `~/.cache/DataCaches` | Root directory used by `DataCache()` (no-argument constructor) |
