@@ -1,7 +1,7 @@
 name = "DataCaches"
 uuid = "c1455f2b-6d6f-4f37-b463-919f923708a5"
 authors = ["Jeet Sukumaran <jeetsukumaran@gmail.com>"]
-version = "0.1.0"
+version = "1.0.0"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
