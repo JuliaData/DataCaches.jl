@@ -1,27 +1,48 @@
 # DataCaches.jl
 
 A lightweight, file-backed key-value cache for Julia for workflows
-that make expensive function calls (remote API queries, long-running computations)
-and need results to survive across Julia sessions.
+that make frequent time-, internet or network bandwidth expensive function calls 
+(remote API queries, long-running computations) and need results to 
+be available across Julia sessions.
 
-Major use-case for me is in teaching workshops or courses in which remote databases are queried frequently.
-Many large numbers of people almost simultaneously hitting database multiple times may be an issue, and in most cases
-most individuals but especially the instructors are running the same queries over and over again.
+
+Three levels of caching are provided, from manual to fully automatic:
+
+| Level     | Mechanism              | Persistence     | Wrapper or library integration required? |
+|-----------|------------------------|-----------------|------------------------------------------|
+| Explicit  | `dc["label"] = result` | Across sessions | No                                       |
+| Memoized  | `@filecache`           | Across sessions | No                                       |
+| Memoized  | `@memcache`            | In-session only | No                                       |
+| Automatic | `setautocache!`        | Across sessions | Yes                                      |
+
+## Motivation
+
+When teaching labs, practicals, workshops, or courses in which the activities involve querying databases, the 
+resulting large numbers of people almost hitting the database repeatedly and frequently in 
+at almost the same time often causes issues with the resource itself or supporting resources (such as internet bandwidth).
+
 Memoizing the function calls to the database and caching the data to disk reduces most of this resource stress significantly.
 In more extreme circumstances, e.g. teaching in conditions where network access is
 slow, unreliable, or just not available, the caches can be distributed on disk or as part of the workshop materials.
 One of the key design features is that client code can run without little to (in auto mode) no modification, so the
 cache mechanisms do not pollute the syntax and presentation of primary codebase being taught or run.
 
-Three levels of caching are provided, from manual to fully automatic:
+(Also useful in most data science analytics, informatics, pipelines or software development projects, databases are frequently queried identically multiple times for the exact same results, and in which backend data query results are not expected to change between (manual) cache refresh operations, or it does not matter if they do.)
 
-| Level | Mechanism | Persistence | Library integration required? |
-|---|---|---|---|
-| Explicit | `dc["label"] = result` | Across sessions | No |
-| Memoized | `@filecache`, `@memcache` | Across sessions / in-session | No |
-| Automatic | `setautocache!` | Across sessions | Yes (or thin wrapper) |
+There are many other solutions out there, but this package is particularly useful in the above contexts due to the following design objectives:
 
----
+- Syntactically lightweight or (almost) invisible. 
+- Seamless integration into REPL- or script-based workflow without requiring any change of logic or structure.
+- Straight-forward, flexible, and completely transparent management of cache store, with views and adatra accessible not only 
+  through Julia for convenience, but also through standard file-system tools.
+- Yet, cache store setup and management is *completely* optional, and novice users need not even be aware of its existence or operation.
+- The cache store and usage persists across Julia sessions (i.e., not in-memory only, though that is supported).
+- A particular cache store file-system directory can be shared across different computing systems or users by copying, cloning, or as an compressed archive.
+
+`DataCaches.jl` offers three approaches to manipulating the cache that satisfy these objectives, each varying with differences in emphases on the usage pattern or requirement: (1) an explicit `Dict` style interface for folks comfortable with managing their explicit caching/decaching; (1) a syntactically-lightweight memoization approach that allows for selective application of automated background cache pre-population to particular function calls; a fully seamless approach where all function calls (or all calls of particular functions) will have their results cached on first call and retrieved on subsequent calls.
+
+
+## Installation
 
 At the Julia REPL, type "`]`" to switch into Package manager mode and then type:
 
