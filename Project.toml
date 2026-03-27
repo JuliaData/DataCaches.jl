@@ -1,0 +1,7 @@
+name = "DataCaches"
+uuid = "31824bf0-2618-4a96-806f-bead230a2a0c"
+authors = ["Jeet Sukumaran <jeetsukumaran@gmail.com>"]
+version = "0.1.0"
+
+[compat]
+julia = "1.10.10"
