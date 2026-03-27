@@ -457,4 +457,4 @@ with no overhead.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATACACHES_CACHE_DIR` | `~/.cache/DataCaches` | Root directory used by `DataCache()` (no-argument constructor) |
+| `DATACACHES_DEFAULT_STORE` | `~/.cache/DataCaches/_DEFAULT` | Root directory used by `DataCache()` (no-argument constructor) |

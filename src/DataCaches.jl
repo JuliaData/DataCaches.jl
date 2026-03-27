@@ -71,17 +71,17 @@ end
 # =============================================================================
 
 """
-    DataCache([root::AbstractString])
+    DataCache([store::AbstractString])
 
 A labeled, file-backed key-value store for caching query results across
 Julia sessions.
 
-Data is persisted in `root` as CSV files (for `DataFrame` values) or
+Data is persisted in `store` as CSV files (for `DataFrame` values) or
 serialized Julia objects (`.jls`) for anything else. An index file
-(`cache_index.toml`) in `root` keeps track of all entries.
+(`cache_index.toml`) in `store` keeps track of all entries.
 
-The default root directory is `\$HOME/.cache/PaleobiologyDB/` (overridden
-by the `PBDB_CACHE_DIR` environment variable).
+The default store directory is `\$HOME/.cache/DataCaches/_DEFAULT/` (overridden
+by the `DATACACHES_DEFAULT_STORE` environment variable).
 
 # Examples
 ```julia
@@ -115,7 +115,7 @@ showcache(cache)
 ```
 """
 mutable struct DataCache
-    root::String
+    store::String
     _index::Dict{String,CacheKey}    # id → CacheKey
     _by_label::Dict{String,String}   # label → id
     _next_seq::Int                   # monotonically incrementing seq counter
@@ -123,24 +123,21 @@ end
 
 const _INDEX_FILENAME = "cache_index.toml"
 
-# NOTE: default dir intentionally keeps "PaleobiologyDB" while this package
-# ships bundled with PaleobiologyDB.jl. Update to "DataCaches" when published
-# as an independent package.
 function _default_cache_dir()
-    return get(ENV, "PBDB_CACHE_DIR", joinpath(homedir(), ".cache", "PaleobiologyDB"))
+    return get(ENV, "DATACACHES_DEFAULT_STORE", joinpath(homedir(), ".cache", "DataCaches", "_DEFAULT"))
 end
 
-function DataCache(root::AbstractString = _default_cache_dir())
-    root = abspath(root)
-    mkpath(root)
-    cache = DataCache(root, Dict{String,CacheKey}(), Dict{String,String}(), 1)
+function DataCache(store::AbstractString = _default_cache_dir())
+    store = abspath(store)
+    mkpath(store)
+    cache = DataCache(store, Dict{String,CacheKey}(), Dict{String,String}(), 1)
     _load_index!(cache)
     return cache
 end
 
 # --- Index I/O ---------------------------------------------------------------
 
-_index_file(cache::DataCache) = joinpath(cache.root, _INDEX_FILENAME)
+_index_file(cache::DataCache) = joinpath(cache.store, _INDEX_FILENAME)
 
 function _load_index!(cache::DataCache)
     p = _index_file(cache)
@@ -207,7 +204,7 @@ end
 
 function _data_path(cache::DataCache, id::String, data)
     ext = data isa AbstractDataFrame ? ".csv" : ".jls"
-    return joinpath(cache.root, id * ext)
+    return joinpath(cache.store, id * ext)
 end
 
 function _write_file(fpath::String, data)
@@ -488,18 +485,18 @@ end
 
 function Base.show(io::IO, cache::DataCache)
     n = length(cache._index)
-    print(io, "DataCache(\"$(cache.root)\", $n entr$(n == 1 ? "y" : "ies"))")
+    print(io, "DataCache(\"$(cache.store)\", $n entr$(n == 1 ? "y" : "ies"))")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", cache::DataCache)
     entries = sort(collect(values(cache._index)); by = k -> k.seq)
     if isempty(entries)
-        print(io, "DataCache is empty: $(cache.root)")
+        print(io, "DataCache is empty: $(cache.store)")
         return
     end
     n = length(entries)
     seq_width = isempty(entries) ? 1 : ndigits(entries[end].seq)
-    println(io, "DataCache: $(cache.root)  ($n entr$(n == 1 ? "y" : "ies"))")
+    println(io, "DataCache: $(cache.store)  ($n entr$(n == 1 ? "y" : "ies"))")
     for (i, key) in enumerate(entries)
         _print_cachekey(io, key, seq_width)
         i < n && println(io)
@@ -524,7 +521,7 @@ const _autocache_funcs_ref   = Ref{Union{Nothing,Set{Any}}}(nothing)
     default_filecache() → DataCache
 
 Return the module-level default [`DataCache`](@ref) used by [`@filecache`](@ref).
-Created lazily on first access (root: `~/.cache/PaleobiologyDB/` by default).
+Created lazily on first access (store: `~/.cache/DataCaches/_DEFAULT` by default).
 """
 function default_filecache()
     if isnothing(_filecache_ref[])
