@@ -49,6 +49,7 @@ Pkg.add(url="https://github.com/jeetsukumaran/DataCaches.jl")
 
 ```julia
 using DataCaches
+using PaleobiologDB # For example
 
 # Create a cache backed by a directory on disk
 dc = DataCache(joinpath(homedir(), ".datacaches", "myproject"))
