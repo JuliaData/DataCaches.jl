@@ -8,6 +8,7 @@ A lightweight, file-backed key-value cache for Julia for workflows
 that make frequent time-, internet or network bandwidth expensive function calls 
 (remote API queries, long-running computations) and need results to 
 be available across Julia sessions.
+*Any* Julia object can be cached to disk to persist across sessions as `.jls` Julia serialized object files, but a special consideration is given to `DataFrame` objects as these are stored as `.csv` files, so they can also be independently inspected, accessed, and manipulated if needed.
 
 
 Three levels of caching are provided, from manual to fully automatic:
@@ -21,6 +22,10 @@ Three levels of caching are provided, from manual to fully automatic:
 
 ## Motivation
 
+This package is generally useful anywhere and everywhere disk-based memoization and caching are required (e.g. analytics, informatics, or software development projects, where databases or computationally expensive functions are frequently queried identically multiple times for the exact same results, and in which backend data query results are not expected to change between (manual) cache refresh operations, or it does not matter if they do.
+
+However, bringing together as it does a broad range of caching mechanisms *and* syntax, makes it uniquely suited to solve one class of problems that none of the other offerings out there could do in quite this way.
+
 When teaching labs, practicals, workshops, or courses in which the activities involve querying databases, the 
 resulting large numbers of people almost hitting the database repeatedly and frequently in 
 at almost the same time often causes issues with the resource itself or supporting resources (such as internet bandwidth).
@@ -31,7 +36,6 @@ slow, unreliable, or just not available, the caches can be distributed on disk o
 One of the key design features is that client code can run without little to (in auto mode) no modification, so the
 cache mechanisms do not pollute the syntax and presentation of primary codebase being taught or run.
 
-(Also useful in most data science analytics, informatics, pipelines or software development projects, databases are frequently queried identically multiple times for the exact same results, and in which backend data query results are not expected to change between (manual) cache refresh operations, or it does not matter if they do.)
 
 There are many other solutions out there, but this package is particularly useful in the above contexts due to the following design objectives:
 
