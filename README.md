@@ -1,5 +1,9 @@
 # DataCaches.jl
 
+[![CI](https://github.com/jeetsukumaran/DataCaches.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/jeetsukumaran/DataCaches.jl/actions/workflows/CI.yml)
+[![Documentation (stable)](https://img.shields.io/badge/docs-stable-blue.svg)](https://jeetsukumaran.github.io/DataCaches.jl/stable)
+[![Documentation (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://jeetsukumaran.github.io/DataCaches.jl/dev)
+
 A lightweight, file-backed key-value cache for Julia for workflows
 that make frequent time-, internet or network bandwidth expensive function calls 
 (remote API queries, long-running computations) and need results to 
@@ -276,188 +280,9 @@ The wrapper body has three moving parts:
 
 ---
 
-## DataCache API Reference
+## Full API Reference
 
-### Construction
-
-```julia
-DataCache()                                           # default directory
-DataCache(joinpath(homedir(), ".datacaches", "p1"))  # explicit directory
-```
-
-The directory is created if it does not exist. An index file
-(`cache_index.toml`) and data files (`.csv` for `DataFrame` values,
-`.jls` for everything else) are written there.
-
-A `DataCache` constructed from the same directory in a new Julia session
-automatically reloads all previously saved entries.
-
-### Write
-
-```julia
-key = write!(dc, data)
-key = write!(dc, data; label = "my label")
-key = write!(dc, data; label = "q1", description = "query for paper §3")
-dc["my label"] = data                  # setindex! sugar (label required)
-```
-
-`write!` returns a `CacheKey`. If `label` is given and an entry with that
-label already exists, the old entry (and its backing file) is silently
-replaced.
-
-`DataFrame` values are stored as CSV. All other values are serialized with
-Julia's `Serialization` standard library.
-
-### Read
-
-```julia
-data = read(dc, key)          # by CacheKey
-data = read(dc, "my label")   # by label string
-data = dc["my label"]         # getindex sugar
-data = dc[key]
-```
-
-### Introspection
-
-```julia
-haskey(dc, "my label")  # → Bool
-haskey(dc, key)         # → Bool
-length(dc)              # → Int
-isempty(dc)             # → Bool
-
-keys(dc)                # → Vector{CacheKey}
-keylabels(dc)           # → Vector{String}
-keypaths(dc)            # → Vector{String}
-
-label(dc, key)          # → String  (same as key.label)
-path(dc, key)           # → String  (same as key.path)
-
-showcache(dc)           # prints a summary table to stdout
-```
-
-### Delete
-
-```julia
-delete!(dc, key)          # by CacheKey
-delete!(dc, "my label")   # by label
-delete!(dc, "2a9d4a87")   # by UUID prefix (shown by showcache)
-delete!(dc, 3)            # by sequence index (shown by showcache)
-clear!(dc)                # remove all entries
-```
-
-### Relabel
-
-Rename a label without touching the backing data file.
-
-```julia
-relabel!(dc, "old label", "new label")   # by label
-relabel!(dc, key, "new label")           # by CacheKey
-relabel!(dc, 3, "new label")             # by sequence index
-```
-
-### Reindex
-
-After many write/delete cycles, sequence numbers can grow large. `reindexcache!`
-renumbers all entries 1..n (in existing sequence order), closing all gaps.
-
-```julia
-reindexcache!(dc)
-```
-
----
-
-## CacheKey
-
-`write!` returns a `CacheKey` struct with six fields:
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | `String` | UUID (unique per write) |
-| `seq` | `Int` | Stable integer index; survives reloads; use `reindexcache!` to compact gaps |
-| `label` | `String` | User-provided label, or `""` |
-| `path` | `String` | Absolute path to the backing file |
-| `description` | `String` | Human-readable annotation, or `""` |
-| `datecached` | `DateTime` | Timestamp of last write |
-
-`CacheKey` objects can be passed directly to `read`, `delete!`, `relabel!`, and `haskey`.
-
----
-
-## Default file cache and global state
-
-```julia
-# Get or lazily create the module-level default DataCache
-dc = default_filecache()
-
-# Replace it with a specific store
-set_default_filecache!(DataCache("/my/project/cache"))
-
-# @filecache uses default_filecache() when no cache is given
-occs = @filecache pbdb_occurrences(base_name = "Canidae")
-```
-
----
-
-## Macro reference
-
-### `@filecache [cache] expr`
-
-Cache `expr` (a function call) to disk. Persists across Julia sessions.
-The cache key is the hash of the function name and all argument values.
-
-```julia
-# Uses default_filecache()
-result = @filecache some_expensive_call(arg1, kwarg = val)
-
-# Uses an explicit DataCache
-result = @filecache my_cache some_expensive_call(arg1, kwarg = val)
-```
-
-### `@memcache expr`
-
-Cache `expr` in memory for the current session only.
-
-```julia
-result = @memcache some_expensive_call(arg1, kwarg = val)
-memcache_clear!()   # discard all in-memory results
-```
-
----
-
-## Integration API for library authors
-
-To give your library's users the full `setautocache!` interface, call
-`autocache` inside each query function you want to instrument:
-
-```julia
-import DataCaches: autocache
-
-function my_api_query(endpoint; kwargs...)
-    return autocache(
-        () -> _do_actual_http_fetch(endpoint; kwargs...),
-        my_api_query,
-        endpoint,
-        kwargs,
-    )
-end
-```
-
-`autocache` signature:
-
-```julia
-autocache(fetch_fn, func, endpoint, kwargs; force_refresh::Bool = false)
-```
-
-| Argument | Description |
-|---|---|
-| `fetch_fn` | Zero-argument callable that performs the real fetch |
-| `func` | The public function whose autocache opt-in status is checked |
-| `endpoint` | String identifying the resource (used as part of the cache key) |
-| `kwargs` | The caller's keyword arguments (used as part of the cache key) |
-| `force_refresh` | When `true`, bypasses a cache hit and overwrites the stored result |
-
-If autocache is not active for `func`, `fetch_fn()` is called directly
-with no overhead.
+The complete API reference is available in the [package documentation](https://jeetsukumaran.github.io/DataCaches.jl/stable).
 
 ---
 
@@ -471,6 +296,47 @@ with no overhead.
 | Label is human-readable | Yes | Hash | Hash | Hash |
 | Force re-fetch | Overwrite by label | Overwrite by label | `memcache_clear!` | `force_refresh = true` |
 | Granularity | Any | Per macro site | Per macro site | Per function |
+
+---
+
+## Documentation
+
+The API reference is hosted at <https://jeetsukumaran.github.io/DataCaches.jl/stable>.
+
+To build the docs locally, run from the repository root:
+
+```bash
+# One-time setup
+julia --project=docs -e '
+    import Pkg
+    Pkg.develop(PackageSpec(path=pwd()))
+    Pkg.instantiate()
+'
+
+# Build
+julia --project=docs docs/make.jl
+```
+
+The generated site is written to `docs/build/`. Open `docs/build/index.html`
+in a browser to view it. See [`docs/README.md`](docs/README.md) for details.
+
+---
+
+## Testing
+
+Run the full test suite with:
+
+```bash
+julia -e 'import Pkg; Pkg.test("DataCaches")'
+```
+
+Or, in package manager REPL mode (`]`):
+
+```
+pkg> test DataCaches
+```
+
+See [`test/README.md`](test/README.md) for more options.
 
 ---
 
