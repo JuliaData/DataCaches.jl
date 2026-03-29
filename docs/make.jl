@@ -8,7 +8,7 @@ makedocs(;
     authors="Jeet Sukumaran <jeetsukumaran@gmail.com>",
     sitename="DataCaches.jl",
     format=Documenter.HTML(;
-        canonical="https://jeetsukumaran.github.io/DataCaches.jl",
+        canonical="https://JuliaData.github.io/DataCaches.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -18,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/jeetsukumaran/DataCaches.jl",
+    repo="github.com/JuliaData/DataCaches.jl",
     devbranch="main",
 )

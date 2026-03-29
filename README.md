@@ -1,8 +1,8 @@
 # DataCaches.jl
 
-[![CI](https://github.com/jeetsukumaran/DataCaches.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/jeetsukumaran/DataCaches.jl/actions/workflows/CI.yml)
-[![Documentation (stable)](https://img.shields.io/badge/docs-stable-blue.svg)](https://jeetsukumaran.github.io/DataCaches.jl/stable)
-[![Documentation (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://jeetsukumaran.github.io/DataCaches.jl/dev)
+[![CI](https://github.com/JuliaData/DataCaches.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/JuliaData/DataCaches.jl/actions/workflows/CI.yml)
+[![Documentation (stable)](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaData.github.io/DataCaches.jl/stable)
+[![Documentation (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaData.github.io/DataCaches.jl/dev)
 
 A lightweight, file-backed key-value cache for Julia for workflows
 that make frequent time-, internet or network bandwidth expensive function calls 
@@ -18,13 +18,13 @@ Three levels of caching are provided, from manual to fully automatic:
 | Explicit  | `dc["label"] = result` | Across sessions | No                                       |
 | Memoized  | `@filecache`           | Across sessions | No                                       |
 | Memoized  | `@memcache`            | In-session only | No                                       |
-| Automatic | `setautocache!`        | Across sessions | Yes                                      |
+| Automatic | `autocache!`           | Across sessions | Yes                                      |
 
 ## Motivation
 
 This package is generally useful anywhere and everywhere disk-based memoization and caching are required (e.g. analytics, informatics, or software development projects, where databases or computationally expensive functions are frequently queried identically multiple times for the exact same results, and in which backend data query results are not expected to change between (manual) cache refresh operations, or it does not matter if they do.
 
-However, bringing together as it does a broad range of caching mechanisms *and* syntax, makes it uniquely suited to solve one class of problems that none of the other offerings out there could do in quite this way.
+However, in addition, its broad range of caching mechanisms *and* syntax makes it uniquely suited to solve one class of problems that none of the other offerings out there could do in quite this way.
 
 When teaching labs, practicals, workshops, or courses in which the activities involve querying databases, the 
 resulting large numbers of people almost hitting the database repeatedly and frequently in 
@@ -69,7 +69,7 @@ Or, if you want the latest development version from the source repository:
 
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/jeetsukumaran/DataCaches.jl")
+Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 ```
 
 ---
@@ -204,7 +204,7 @@ memcache_clear!()   # discard all in-memory results
 
 ### Pattern 3 — Automatic caching
 
-`setautocache!` installs a global hook that intercepts every call to an
+`autocache!` installs a global hook that intercepts every call to an
 instrumented function and transparently caches the result. Existing call sites
 require no modification.
 
@@ -219,33 +219,33 @@ alternative — or you can write a thin wrapper yourself (shown below).
 using DataCaches, PaleobiologyDB
 
 dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
-setautocache!(true; cache = dc)
+autocache!(true; cache = dc)
 
 # All pbdb_* calls now cache automatically — no changes to call sites
 occs  = pbdb_occurrences(base_name = "Canidae")           # fetches + stores
 occs2 = pbdb_occurrences(base_name = "Canidae")           # instant, from cache
 taxa  = pbdb_taxa(name = "Dinosauria", vocab = "pbdb")    # fetches + stores
 
-setautocache!(false)
+autocache!(false)
 ```
 
 Enable caching for specific functions only:
 
 ```julia
-setautocache!(true, pbdb_occurrences; cache = dc)         # only this function
-setautocache!(true, pbdb_taxa; cache = dc)                # add another
-setautocache!(false, pbdb_occurrences)                    # remove one
-setautocache!(false)                                      # disable entirely
+autocache!(true, pbdb_occurrences; cache = dc)         # only this function
+autocache!(true, pbdb_taxa; cache = dc)                # add another
+autocache!(false, pbdb_occurrences)                    # remove one
+autocache!(false)                                      # disable entirely
 
 # Multiple functions at once
-setautocache!(true, [pbdb_occurrences, pbdb_taxa, pbdb_collections]; cache = dc)
+autocache!(true, [pbdb_occurrences, pbdb_taxa, pbdb_collections]; cache = dc)
 ```
 
 #### With any third-party library — thin wrapper approach
 
 For a library that has not integrated DataCaches.jl, write a one-time thin
 wrapper that calls the `autocache` hook. The wrapper is a drop-in replacement
-for the original function, and from that point on the full `setautocache!`
+for the original function, and from that point on the full `autocache!`
 interface works as normal.
 
 ```julia
@@ -264,13 +264,13 @@ end
 
 # Now use the wrapper exactly like a natively integrated function
 dc = DataCache(joinpath(homedir(), ".datacaches", "biodiversity"))
-setautocache!(true; cache = dc)
+autocache!(true; cache = dc)
 
 occs  = gbif_occurrence_search(taxonKey = 212, limit = 300)  # fetches + stores
 occs2 = gbif_occurrence_search(taxonKey = 212, limit = 300)  # from cache
 taxa  = gbif_occurrence_search(taxonKey = 5219857)           # fetches + stores
 
-setautocache!(false)
+autocache!(false)
 ```
 
 The wrapper body has three moving parts:
@@ -286,13 +286,13 @@ The wrapper body has three moving parts:
 
 ## Full API Reference
 
-The complete API reference is available in the [package documentation](https://jeetsukumaran.github.io/DataCaches.jl/stable).
+The complete API reference is available in the [package documentation](https://JuliaData.github.io/DataCaches.jl/stable).
 
 ---
 
 ## Comparison of caching strategies
 
-| | `dc["label"] = ...` | `@filecache` | `@memcache` | `setautocache!` |
+| | `dc["label"] = ...` | `@filecache` | `@memcache` | `autocache!` |
 |---|---|---|---|---|
 | Persists across sessions | Yes | Yes | No | Yes |
 | Works with any library | Yes | Yes | Yes | Only if integrated (or wrapped) |
@@ -305,7 +305,7 @@ The complete API reference is available in the [package documentation](https://j
 
 ## Documentation
 
-The API reference is hosted at <https://jeetsukumaran.github.io/DataCaches.jl/stable>.
+The API reference is hosted at <https://JuliaData.github.io/DataCaches.jl/stable>.
 
 To build the docs locally, run from the repository root:
 

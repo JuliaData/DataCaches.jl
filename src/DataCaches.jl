@@ -11,7 +11,7 @@ export DataCache, CacheKey
 export write!, relabel!, reindexcache!, keylabels, keypaths, clear!, showcache, label, path
 export @filecache, @memcache
 export default_filecache, set_default_filecache!, memcache_clear!
-export setautocache!
+export autocache!
 export autocache
 
 # =============================================================================
@@ -550,7 +550,7 @@ function memcache_clear!()
 end
 
 """
-    setautocache!(enabled::Bool; cache::Union{DataCache,Nothing}=nothing) -> Union{DataCache,Nothing}
+    autocache!(enabled::Bool; cache::Union{DataCache,Nothing}=nothing) -> Union{DataCache,Nothing}
 
 Enable or disable automatic caching for **all** `pbdb_*` API functions.
 
@@ -562,12 +562,12 @@ Returns the active [`DataCache`](@ref), or `nothing` when disabling.
 
 # Examples
 ```julia
-DataCaches.setautocache!(true)
-DataCaches.setautocache!(false)
-DataCaches.setautocache!(true; cache=DataCache("/my/project/cache"))
+DataCaches.autocache!(true)
+DataCaches.autocache!(false)
+DataCaches.autocache!(true; cache=DataCache("/my/project/cache"))
 ```
 """
-function setautocache!(enabled::Bool; cache::Union{DataCache,Nothing}=nothing)
+function autocache!(enabled::Bool; cache::Union{DataCache,Nothing}=nothing)
     _autocache_enabled_ref[] = enabled
     _autocache_funcs_ref[]   = nothing  # global mode
     if enabled
@@ -579,8 +579,8 @@ function setautocache!(enabled::Bool; cache::Union{DataCache,Nothing}=nothing)
 end
 
 """
-    setautocache!(enabled::Bool, func; cache::Union{DataCache,Nothing}=nothing) -> Union{DataCache,Nothing}
-    setautocache!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache,Nothing}=nothing) -> Union{DataCache,Nothing}
+    autocache!(enabled::Bool, func; cache::Union{DataCache,Nothing}=nothing) -> Union{DataCache,Nothing}
+    autocache!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache,Nothing}=nothing) -> Union{DataCache,Nothing}
 
 Enable or disable automatic caching for a specific function (or list of functions).
 
@@ -591,19 +591,19 @@ to per-function mode with only `{func}`.
 When `enabled=false` and per-function mode is active, removes `func` from the allowlist.
 If the allowlist becomes empty, autocache is fully disabled.
 
-**Note:** `setautocache!(false, func)` has no effect when global autocache is on; call
-`setautocache!(false)` to disable globally.
+**Note:** `autocache!(false, func)` has no effect when global autocache is on; call
+`autocache!(false)` to disable globally.
 
 Returns the active [`DataCache`](@ref), or `nothing` when fully disabled.
 
 # Examples
 ```julia
-DataCaches.setautocache!(true, pbdb_occurrences)
-DataCaches.setautocache!(true, [pbdb_occurrences, pbdb_taxa])
-DataCaches.setautocache!(false, pbdb_occurrences)
+DataCaches.autocache!(true, pbdb_occurrences)
+DataCaches.autocache!(true, [pbdb_occurrences, pbdb_taxa])
+DataCaches.autocache!(false, pbdb_occurrences)
 ```
 """
-function setautocache!(enabled::Bool, func; cache::Union{DataCache,Nothing}=nothing)
+function autocache!(enabled::Bool, func; cache::Union{DataCache,Nothing}=nothing)
     if enabled
         _autocache_enabled_ref[] = true
         if isnothing(_autocache_cache_ref[]) || !isnothing(cache)
@@ -618,8 +618,8 @@ function setautocache!(enabled::Bool, func; cache::Union{DataCache,Nothing}=noth
     else
         existing = _autocache_funcs_ref[]
         if isnothing(existing)
-            @warn "setautocache!(false, func) has no effect when global autocache is active. " *
-                  "Call setautocache!(false) to disable autocache globally."
+            @warn "autocache!(false, func) has no effect when global autocache is active. " *
+                  "Call autocache!(false) to disable autocache globally."
             return _autocache_cache_ref[]
         end
         delete!(existing, func)
@@ -632,9 +632,9 @@ function setautocache!(enabled::Bool, func; cache::Union{DataCache,Nothing}=noth
     return _autocache_cache_ref[]
 end
 
-function setautocache!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache,Nothing}=nothing)
+function autocache!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache,Nothing}=nothing)
     for f in funcs
-        setautocache!(enabled, f; cache=cache)
+        autocache!(enabled, f; cache=cache)
     end
     return _autocache_cache_ref[]
 end
