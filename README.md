@@ -18,7 +18,7 @@ Three levels of caching are provided, from manual to fully automatic:
 | Explicit  | `dc["label"] = result` | Across sessions | No                                       |
 | Memoized  | `@filecache`           | Across sessions | No                                       |
 | Memoized  | `@memcache`            | In-session only | No                                       |
-| Automatic | `autocache!`           | Across sessions | Yes                                      |
+| Automatic | `set_autocaching!`           | Across sessions | Yes                                      |
 
 ## Motivation
 
@@ -204,7 +204,7 @@ memcache_clear!()   # discard all in-memory results
 
 ### Pattern 3 — Automatic caching
 
-`autocache!` installs a global hook that intercepts every call to an
+`set_autocaching!` installs a global hook that intercepts every call to an
 instrumented function and transparently caches the result. Existing call sites
 require no modification.
 
@@ -219,33 +219,33 @@ alternative — or you can write a thin wrapper yourself (shown below).
 using DataCaches, PaleobiologyDB
 
 dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
-autocache!(true; cache = dc)
+set_autocaching!(true; cache = dc)
 
 # All pbdb_* calls now cache automatically — no changes to call sites
 occs  = pbdb_occurrences(base_name = "Canidae")           # fetches + stores
 occs2 = pbdb_occurrences(base_name = "Canidae")           # instant, from cache
 taxa  = pbdb_taxa(name = "Dinosauria", vocab = "pbdb")    # fetches + stores
 
-autocache!(false)
+set_autocaching!(false)
 ```
 
 Enable caching for specific functions only:
 
 ```julia
-autocache!(true, pbdb_occurrences; cache = dc)         # only this function
-autocache!(true, pbdb_taxa; cache = dc)                # add another
-autocache!(false, pbdb_occurrences)                    # remove one
-autocache!(false)                                      # disable entirely
+set_autocaching!(true, pbdb_occurrences; cache = dc)         # only this function
+set_autocaching!(true, pbdb_taxa; cache = dc)                # add another
+set_autocaching!(false, pbdb_occurrences)                    # remove one
+set_autocaching!(false)                                      # disable entirely
 
 # Multiple functions at once
-autocache!(true, [pbdb_occurrences, pbdb_taxa, pbdb_collections]; cache = dc)
+set_autocaching!(true, [pbdb_occurrences, pbdb_taxa, pbdb_collections]; cache = dc)
 ```
 
 #### With any third-party library — thin wrapper approach
 
 For a library that has not integrated DataCaches.jl, write a one-time thin
 wrapper that calls the `autocache` hook. The wrapper is a drop-in replacement
-for the original function, and from that point on the full `autocache!`
+for the original function, and from that point on the full `set_autocaching!`
 interface works as normal.
 
 ```julia
@@ -264,13 +264,13 @@ end
 
 # Now use the wrapper exactly like a natively integrated function
 dc = DataCache(joinpath(homedir(), ".datacaches", "biodiversity"))
-autocache!(true; cache = dc)
+set_autocaching!(true; cache = dc)
 
 occs  = gbif_occurrence_search(taxonKey = 212, limit = 300)  # fetches + stores
 occs2 = gbif_occurrence_search(taxonKey = 212, limit = 300)  # from cache
 taxa  = gbif_occurrence_search(taxonKey = 5219857)           # fetches + stores
 
-autocache!(false)
+set_autocaching!(false)
 ```
 
 The wrapper body has three moving parts:
@@ -292,7 +292,7 @@ The complete API reference is available in the [package documentation](https://J
 
 ## Comparison of caching strategies
 
-| | `dc["label"] = ...` | `@filecache` | `@memcache` | `autocache!` |
+| | `dc["label"] = ...` | `@filecache` | `@memcache` | `set_autocaching!` |
 |---|---|---|---|---|
 | Persists across sessions | Yes | Yes | No | Yes |
 | Works with any library | Yes | Yes | Yes | Only if integrated (or wrapped) |

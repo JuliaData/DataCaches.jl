@@ -153,15 +153,15 @@ using DataFrames
         @test true
     end
 
-    @testset "autocache! global enable/disable" begin
-        autocache!(false)
-        autocache!(true)
-        autocache!(false)
+    @testset "set_autocaching! global enable/disable" begin
+        set_autocaching!(false)
+        set_autocaching!(true)
+        set_autocaching!(false)
         @test true
     end
 
     @testset "autocache hook — inactive path" begin
-        autocache!(false)
+        set_autocaching!(false)
         called = Ref(0)
         fetch_fn = () -> (called[] += 1; "result")
         result = autocache(fetch_fn, identity, "ep", (;))
@@ -172,7 +172,7 @@ using DataFrames
     @testset "autocache hook — cache miss then hit" begin
         mktempdir() do dir
             c = DataCache(dir)
-            autocache!(true; cache = c)
+            set_autocaching!(true; cache = c)
             called = Ref(0)
             fetch_fn = () -> (called[] += 1; DataFrame(x = [1]))
             r1 = autocache(fetch_fn, identity, "ep", (;))
@@ -181,21 +181,21 @@ using DataFrames
             r2 = autocache(fetch_fn, identity, "ep", (;))
             @test r2 isa DataFrame
             @test called[] == 1  # not called again
-            autocache!(false)
+            set_autocaching!(false)
         end
     end
 
     @testset "autocache hook — force_refresh" begin
         mktempdir() do dir
             c = DataCache(dir)
-            autocache!(true; cache = c)
+            set_autocaching!(true; cache = c)
             called = Ref(0)
             fetch_fn = () -> (called[] += 1; DataFrame(x = [called[]]))
             autocache(fetch_fn, identity, "ep2", (;))
             @test called[] == 1
             autocache(fetch_fn, identity, "ep2", (;); force_refresh = true)
             @test called[] == 2
-            autocache!(false)
+            set_autocaching!(false)
         end
     end
 

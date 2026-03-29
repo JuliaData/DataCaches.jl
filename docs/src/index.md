@@ -19,7 +19,7 @@ Three caching levels are provided, from manual to fully automatic:
 | Explicit  | `dc["label"] = result` | Across sessions  | No                            |
 | Memoized  | `@filecache`           | Across sessions  | No                            |
 | Memoized  | `@memcache`            | In-session only  | No                            |
-| Automatic | `autocache!`        | Across sessions  | Yes                           |
+| Automatic | `set_autocaching!`        | Across sessions  | Yes                           |
 
 ## Installation
 
