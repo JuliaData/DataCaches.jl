@@ -29,10 +29,10 @@ uuid = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 version = "0.10.16"
 
 [[deps.CodeTracking]]
-deps = ["InteractiveUtils", "UUIDs"]
-git-tree-sha1 = "c5c86e5dcd6cbc74ddc221a875c41df2814bbc6a"
+deps = ["InteractiveUtils", "REPL", "UUIDs"]
+git-tree-sha1 = "cfb7a2e89e245a9d5016b70323db412b3a7438d5"
 uuid = "da1fd8a2-8d9e-5ec2-8556-3022fb5608a2"
-version = "3.0.1"
+version = "3.0.2"
 
 [[deps.CodecZlib]]
 deps = ["TranscodingStreams", "Zlib_jll"]
@@ -84,9 +84,9 @@ version = "1.8.1"
 
 [[deps.DataStructures]]
 deps = ["OrderedCollections"]
-git-tree-sha1 = "e357641bb3e0638d353c4b29ea0e40ea644066a6"
+git-tree-sha1 = "e86f4a2805f7f19bec5129bc9150c38208e5dc23"
 uuid = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-version = "0.19.3"
+version = "0.19.4"
 
 [[deps.DataValueInterfaces]]
 git-tree-sha1 = "bfc1187b79289637fa0ef6d4436ebdfe6905cbd6"
@@ -332,9 +332,9 @@ version = "1.2.2"
 
 [[deps.Revise]]
 deps = ["CodeTracking", "FileWatching", "InteractiveUtils", "JuliaInterpreter", "LibGit2", "LoweredCodeUtils", "OrderedCollections", "Preferences", "REPL", "UUIDs"]
-git-tree-sha1 = "d97d78d4fc5f858d8ce44f6b88bc972f2023f51d"
+git-tree-sha1 = "a44fc6ab46efc588f122ee71d6e2ca83b8645ff7"
 uuid = "295af30f-e4ad-537b-8983-00126c2a3abe"
-version = "3.14.0"
+version = "3.14.1"
 
     [deps.Revise.extensions]
     DistributedExt = "Distributed"

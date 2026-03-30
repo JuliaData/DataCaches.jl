@@ -311,12 +311,7 @@ To build the docs locally, run from the repository root:
 
 ```bash
 # One-time setup
-julia --project=docs -e '
-    import Pkg
-    Pkg.develop(Pkg.PackageSpec(path=pwd()))
-    Pkg.instantiate()
-'
-
+julia --project=docs -e 'using Pkg; Pkg.instantiate()'
 # Build
 julia --project=docs docs/make.jl
 ```

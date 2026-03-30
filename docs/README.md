@@ -9,11 +9,7 @@ Run once from the **repository root** to install the docs dependencies and
 dev-link the local package into the docs environment:
 
 ```bash
-julia --project=docs -e '
-    import Pkg
-    Pkg.develop(Pkg.PackageSpec(path=pwd()))
-    Pkg.instantiate()
-'
+julia --project=docs -e 'using Pkg; Pkg.instantiate()'
 ```
 
 Re-run this step after adding new dependencies to `docs/Project.toml`.
