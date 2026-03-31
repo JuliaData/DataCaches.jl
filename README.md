@@ -35,21 +35,19 @@ DataCaches.jl provides three complementary interfaces aligned with its [purpose]
 - an explicit Dict-style API for manual cache control
 
 ```julia
-cache["Any Julia object"] = foo
-bar = cache["Any Julia object"] 
+# Just like a `Dict`, but auto-persists across sessions.
+cache["fig1"] = plot(...)
+fig1 = cache["fig1"] 
 ```
-
 - a lightweight memoization mechanism enabling selective, automated caching of function call (and particular combination of run time argument values).
 
 ```julia
-# If cache does not have this result stored,
-# function will be evaluated, cached, and returned
-foo = @filecache func1(...) 
-# ...
-# Later ...
-# ...
+# If the active disk cache does not have this particular 
+# combination of function name and argument values stored,
+# then the function will be evaluated, cached, and returned.
+foo = @filecache func1(x, y) 
 # Function not evaluated; cached result returned
-bar = @filecache func1(...) 
+bar = @filecache func1(x, y) 
 ```
 
 - and a fully seamless mode in which (instrumented) function calls are cached on first execution and transparently retrieved thereafter
@@ -58,15 +56,12 @@ bar = @filecache func1(...)
 # Automatically cache all instrumented
 # functions.
 set_autocaching!(true)
-
-# If cache does not have this result stored,
-# function will be evaluated, cached, and returned
-foo = func1(...) 
-# ...
-# Later ...
-# ...
+# If the active disk cache does not have this particular 
+# combination of function name and argument values stored,
+# then the function will be evaluated, cached, and returned.
+foo = func1(x, y) 
 # Function not evaluated; cached result returned
-bar = func1(...) 
+bar = func1(x, y) 
 ```
 
 with the following design principles:
