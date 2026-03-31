@@ -21,35 +21,49 @@ Three levels of caching are provided, from manual to fully automatic:
 | Automatic | `set_autocaching!`           | Across sessions | Yes                                      |
 
 
+
 ## Motivation
 
-This package is generally useful anywhere and everywhere disk-based memoization and caching are required (e.g. analytics, informatics, or software development projects, where databases or computationally expensive functions are frequently queried identically multiple times for the exact same results, and in which backend data query results are not expected to change between (manual) cache refresh operations, or it does not matter if they do.
+This package addresses a general need for disk-based memoization and caching in contexts such as 
+analytics, informatics, and software development, where identical database queries or computationally 
+expensive functions are executed repeatedly and expected to return stable results between manual cache refreshes. 
+It is broadly applicable, but its combination of flexible caching mechanisms and minimal syntactic overhead makes 
+it particularly effective for a specific class of problems not well handled by existing tools.
 
-However, in addition, its broad range of caching mechanisms *and* syntax makes it uniquely suited to solve one class of problems that none of the other offerings out there could do in quite this way.
+However, in addition, its broad range of caching mechanisms *and* syntax makes it 
+uniquely suited to solve one class of problems that none of the other offerings out 
+there could do in quite this way.
 
-When teaching labs, practicals, workshops, or courses in which the activities involve querying databases, the 
-resulting large numbers of people almost hitting the database repeatedly and frequently in 
-at almost the same time often causes issues with the resource itself or supporting resources (such as internet bandwidth).
+This package addresses a general need for disk-based memoization and caching in contexts such as analytics, informatics, and software development, 
+where identical database queries or computationally expensive functions are executed repeatedly and expected to return stable results between manual cache refreshes. 
+It is broadly applicable, but its combination of flexible caching mechanisms and minimal syntactic overhead makes it particularly effective for a specific class of problems not well handled by existing tools.
 
-Memoizing the function calls to the database and caching the data to disk reduces most of this resource stress significantly.
-In more extreme circumstances, e.g. teaching in conditions where network access is
-slow, unreliable, or just not available, the caches can be distributed on disk or as part of the workshop materials.
-One of the key design features is that client code can run without little to (in auto mode) no modification, so the
-cache mechanisms do not pollute the syntax and presentation of primary codebase being taught or run.
+A primary use case arises in instructional settings (labs, workshops, and courses) where many users simultaneously issue repeated database queries, often overwhelming shared resources such as the database itself or available network bandwidth.
+By memoizing these calls and persisting results to disk, the package substantially reduces this load. 
+In constrained environments with limited or unreliable connectivity, caches can be precomputed and distributed with course materials, allowing code to run with little to no modification. 
+In automatic modes, the caching layer remains effectively invisible, preserving the clarity and integrity of the instructional code.
 
+The design prioritizes lightweight, unobtrusive integration into REPL and script workflows, requiring no changes to program logic or structure. 
+Cache storage is fully transparent and accessible both programmatically and via the file system, yet entirely optional—novice users can remain unaware of its existence. 
+Caches persist across sessions and can be shared across systems by copying or archiving the underlying directory.
 
-There are many other solutions out there, but this package is particularly useful in the above contexts due to the following design objectives:
+## Features
+
+DataCaches.jl provides three complementary interfaces aligned with these objectives: 
+
+- an explicit Dict-style API for manual cache control (`cache["A Julia object"] = foo`);
+- a lightweight memoization mechanism enabling selective, automated caching of function calls (`@filecache func(...)`) 
+- and a fully seamless mode in which (instrumented) function calls are cached on first execution and transparently retrieved thereafter (`set_autocaching(true)`)
+
+with the following design principles:
 
 - Syntactically lightweight or (almost) invisible. 
 - Seamless integration into REPL- or script-based workflow without requiring any change of logic or structure.
-- Straight-forward, flexible, and completely transparent management of cache store, with views and adatra accessible not only 
+- Straight-forward, flexible, and completely transparent management of cache store, with views and data accessible not only 
   through Julia for convenience, but also through standard file-system tools.
 - Yet, cache store setup and management is *completely* optional, and novice users need not even be aware of its existence or operation.
 - The cache store and usage persists across Julia sessions (i.e., not in-memory only, though that is supported).
 - A particular cache store file-system directory can be shared across different computing systems or users by copying, cloning, or as an compressed archive.
-
-`DataCaches.jl` offers three approaches to manipulating the cache that satisfy these objectives, each varying with differences in emphases on the usage pattern or requirement: (1) an explicit `Dict` style interface for folks comfortable with managing their explicit caching/decaching; (1) a syntactically-lightweight memoization approach that allows for selective application of automated background cache pre-population to particular function calls; a fully seamless approach where all function calls (or all calls of particular functions) will have their results cached on first call and retrieved on subsequent calls.
-
 
 ## Installation
 
