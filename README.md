@@ -20,34 +20,17 @@ Three levels of caching are provided, from manual to fully automatic:
 | Memoized  | `@memcache`            | In-session only | No                                       |
 | Automatic | `set_autocaching!`           | Across sessions | Yes                                      |
 
-## Motivation
+## Purpose
 
-This package addresses a general need for disk-based memoization and caching in contexts such as 
-analytics, informatics, and software development, where identical database queries or computationally 
-expensive functions are executed repeatedly and expected to return stable results between manual cache refreshes. 
-It is broadly applicable, but its combination of flexible caching mechanisms and minimal syntactic overhead makes 
-it particularly effective for a specific class of problems not well handled by existing tools.
+The purpose of this package is to provide a persistent, file-backed key–value store for arbitrary Julia objects, keyed by user-assigned labels or auto-generated argument hashes.
+This enables short-circuiting of expensive function calls by returning stored results instead of recomputing repeated calls—within or across Julia sessions—while also providing a portable, inspectable cache (plain files on disk) that can be shared across users or systems without requiring database infrastructure.
 
-However, in addition, its broad range of caching mechanisms *and* syntax makes it 
-uniquely suited to solve one class of problems that none of the other offerings out 
-there could do in quite this way.
-
-This package addresses a general need for disk-based memoization and caching in contexts such as analytics, informatics, and software development, 
-where identical database queries or computationally expensive functions are executed repeatedly and expected to return stable results between manual cache refreshes. 
-It is broadly applicable, but its combination of flexible caching mechanisms and minimal syntactic overhead makes it particularly effective for a specific class of problems not well handled by existing tools.
-
-A primary use case arises in instructional settings (labs, workshops, and courses) where many users simultaneously issue repeated database queries, often overwhelming shared resources such as the database itself or available network bandwidth.
-By memoizing these calls and persisting results to disk, the package substantially reduces this load. 
-In constrained environments with limited or unreliable connectivity, caches can be precomputed and distributed with course materials, allowing code to run with little to no modification. 
-In automatic modes, the caching layer remains effectively invisible, preserving the clarity and integrity of the instructional code.
-
-The design prioritizes lightweight, unobtrusive integration into REPL and script workflows, requiring no changes to program logic or structure. 
-Cache storage is fully transparent and accessible both programmatically and via the file system, yet entirely optional—novice users can remain unaware of its existence. 
-Caches persist across sessions and can be shared across systems by copying or archiving the underlying directory.
+This package also provides mechanisms allowing library developers to patch in support for a fully transparent, under-the-hood auto-caching layer that requires no changes to user-facing call syntax.
+This keeps exploratory and instructional code clean and readable, with caching remaining invisible in automatic mode and introducing no modifications to program logic or presentation.
 
 ## Features
 
-DataCaches.jl provides three complementary interfaces aligned with its objectives: 
+DataCaches.jl provides three complementary interfaces aligned with its [purpose](#Purpose): 
 
 - an explicit Dict-style API for manual cache control
 
@@ -396,3 +379,29 @@ See [`test/README.md`](test/README.md) for more options.
 | Variable | Default | Description |
 |---|---|---|
 | `DATACACHES_DEFAULT_STORE` | `~/.cache/DataCaches` | Root directory used by `DataCache()` (no-argument constructor) |
+
+
+## About
+
+This package addresses a general need for disk-based memoization and caching in contexts such as 
+analytics, informatics, and software development, where identical database queries or computationally 
+expensive functions are executed repeatedly and expected to return stable results between manual cache refreshes. 
+It is broadly applicable, but its combination of flexible caching mechanisms and minimal syntactic overhead makes 
+it particularly effective for a specific class of problems not well handled by existing tools.
+
+However, in addition, its broad range of caching mechanisms *and* syntax makes it 
+uniquely suited to solve one class of problems that none of the other offerings out 
+there could do in quite this way.
+
+This package addresses a general need for disk-based memoization and caching in contexts such as analytics, informatics, and software development, 
+where identical database queries or computationally expensive functions are executed repeatedly and expected to return stable results between manual cache refreshes. 
+It is broadly applicable, but its combination of flexible caching mechanisms and minimal syntactic overhead makes it particularly effective for a specific class of problems not well handled by existing tools.
+
+A primary use case arises in instructional settings (labs, workshops, and courses) where many users simultaneously issue repeated database queries, often overwhelming shared resources such as the database itself or available network bandwidth.
+By memoizing these calls and persisting results to disk, the package substantially reduces this load. 
+In constrained environments with limited or unreliable connectivity, caches can be precomputed and distributed with course materials, allowing code to run with little to no modification. 
+In automatic modes, the caching layer remains effectively invisible, preserving the clarity and integrity of the instructional code.
+
+The design prioritizes lightweight, unobtrusive integration into REPL and script workflows, requiring no changes to program logic or structure. 
+Cache storage is fully transparent and accessible both programmatically and via the file system, yet entirely optional—novice users can remain unaware of its existence. 
+Caches persist across sessions and can be shared across systems by copying or archiving the underlying directory.
