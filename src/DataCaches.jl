@@ -148,6 +148,7 @@ function _load_index!(cache::DataCache)
     for (id, entry) in get(data, "entries", Dict())
         lbl    = get(entry, "label",       "")
         fpath  = get(entry, "path",        "")
+        fpath  = isabspath(fpath) ? fpath : joinpath(cache.store, fpath)
         desc   = get(entry, "description", "")
         seq    = get(entry, "seq",         0)
         dt_raw = get(entry, "datecached",  "")
@@ -189,7 +190,7 @@ function _save_index(cache::DataCache)
         entries[id] = Dict{String,Any}(
             "seq"         => key.seq,
             "label"       => key.label,
-            "path"        => key.path,
+            "path"        => relpath(key.path, cache.store),
             "description" => key.description,
             "datecached"  => key.datecached == typemin(DateTime) ? "" :
                              Dates.format(key.datecached, "yyyy-mm-ddTHH:MM:SS"),

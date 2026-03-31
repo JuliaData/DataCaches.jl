@@ -1,6 +1,7 @@
 using Test
 using DataCaches
 using DataFrames
+using TOML
 
 @testset "DataCaches" begin
 
@@ -74,6 +75,46 @@ using DataFrames
             write!(c, 42; label = "lbl")
             @test "lbl" in keylabels(c)
             @test length(keypaths(c)) == 1
+        end
+    end
+
+    @testset "index stores relative paths" begin
+        mktempdir() do dir
+            c = DataCache(dir)
+            write!(c, [1, 2, 3]; label = "relpath_test")
+            index = TOML.parsefile(joinpath(dir, "cache_index.toml"))
+            stored_paths = [e["path"] for e in values(index["entries"])]
+            @test all(!isabspath(p) for p in stored_paths)
+        end
+    end
+
+    @testset "relative paths survive reload" begin
+        mktempdir() do dir
+            c1 = DataCache(dir)
+            write!(c1, [4, 5, 6]; label = "rel_reload")
+            c2 = DataCache(dir)
+            @test haskey(c2, "rel_reload")
+            @test Base.read(c2, "rel_reload") == [4, 5, 6]
+        end
+    end
+
+    @testset "backward compat: absolute paths in index still load" begin
+        mktempdir() do dir
+            c = DataCache(dir)
+            key = write!(c, [7, 8, 9]; label = "abs_compat")
+            # Rewrite the index with the absolute path as it was stored before this change
+            index_path = joinpath(dir, "cache_index.toml")
+            index = TOML.parsefile(index_path)
+            for (id, entry) in index["entries"]
+                entry["path"] = joinpath(dir, entry["path"])
+            end
+            open(index_path, "w") do io
+                TOML.print(io, index)
+            end
+            # Reload and verify it still works
+            c2 = DataCache(dir)
+            @test haskey(c2, "abs_compat")
+            @test Base.read(c2, "abs_compat") == [7, 8, 9]
         end
     end
 
