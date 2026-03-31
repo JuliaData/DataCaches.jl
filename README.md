@@ -20,8 +20,6 @@ Three levels of caching are provided, from manual to fully automatic:
 | Memoized  | `@memcache`            | In-session only | No                                       |
 | Automatic | `set_autocaching!`           | Across sessions | Yes                                      |
 
-
-
 ## Motivation
 
 This package addresses a general need for disk-based memoization and caching in contexts such as 
@@ -119,8 +117,6 @@ Or, if you want the latest development version from the source repository:
 using Pkg
 Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 ```
-
----
 
 ## Documentation
 
