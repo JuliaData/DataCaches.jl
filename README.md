@@ -49,11 +49,44 @@ Caches persist across sessions and can be shared across systems by copying or ar
 
 ## Features
 
-DataCaches.jl provides three complementary interfaces aligned with these objectives: 
+DataCaches.jl provides three complementary interfaces aligned with its objectives: 
 
-- an explicit Dict-style API for manual cache control (`cache["A Julia object"] = foo`);
-- a lightweight memoization mechanism enabling selective, automated caching of function calls (`@filecache func(...)`) 
-- and a fully seamless mode in which (instrumented) function calls are cached on first execution and transparently retrieved thereafter (`set_autocaching(true)`)
+- an explicit Dict-style API for manual cache control
+
+```julia
+cache["Any Julia object"] = foo
+bar = cache["Any Julia object"] 
+```
+
+- a lightweight memoization mechanism enabling selective, automated caching of function call (and particular combination of run time argument values).
+
+```julia
+# If cache does not have this result stored,
+# function will be evaluated, cached, and returned
+foo = @filecache func1(...) 
+# ...
+# Later ...
+# ...
+# Function not evaluated; cached result returned
+bar = @filecache func1(...) 
+```
+
+- and a fully seamless mode in which (instrumented) function calls are cached on first execution and transparently retrieved thereafter
+
+```julia
+# Automatically cache all instrumented
+# functions.
+set_autocaching!(true)
+
+# If cache does not have this result stored,
+# function will be evaluated, cached, and returned
+foo = func1(...) 
+# ...
+# Later ...
+# ...
+# Function not evaluated; cached result returned
+bar = func1(...) 
+```
 
 with the following design principles:
 
