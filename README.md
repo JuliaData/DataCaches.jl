@@ -22,8 +22,8 @@ Three levels of caching are provided, from manual to fully automatic:
 
 ## Purpose
 
-The purpose of this package is to provide a persistent, file-backed key–value store for arbitrary Julia objects, keyed by user-assigned labels or auto-generated argument hashes.
-This enables short-circuiting of expensive function calls by returning stored results instead of recomputing repeated calls—within or across Julia sessions—while also providing a portable, inspectable cache (plain files on disk) that can be shared across users or systems without requiring database infrastructure.
+The purpose of this package is to provide a persistent, file-backed key-value store for arbitrary Julia objects, keyed by user-assigned labels or auto-generated argument hashes.
+This enables short-circuiting of expensive function calls by returning stored results instead of recomputing repeated calls across Julia sessions while also providing a portable, inspectable cache that can be shared across users or systems without requiring database infrastructure.
 
 This package also provides mechanisms allowing library developers to patch in support for a fully transparent, under-the-hood auto-caching layer that requires no changes to user-facing call syntax.
 This keeps exploratory and instructional code clean and readable, with caching remaining invisible in automatic mode and introducing no modifications to program logic or presentation.
@@ -95,14 +95,6 @@ Or, if you want the latest development version from the source repository:
 using Pkg
 Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 ```
-
-## Documentation
-
-This README provides a summary of the major features and usage of this package.
-The full API documentation can be found [here](https://juliadata.org/DataCaches.jl): 
-
-<https://juliadata.org/DataCaches.jl>
-
 
 ## Quick Start
 
@@ -335,9 +327,9 @@ The complete API reference is available in the [package documentation](https://J
 
 ## Documentation
 
-The API reference is hosted at <https://JuliaData.github.io/DataCaches.jl/stable>.
+The API reference is hosted online at <https://juliadata.org/DataCaches.jl>.
 
-To build the docs locally, run from the repository root:
+To build the documentation locally, run from the repository root:
 
 ```bash
 # One-time setup
