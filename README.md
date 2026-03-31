@@ -20,6 +20,7 @@ Three levels of caching are provided, from manual to fully automatic:
 | Memoized  | `@memcache`            | In-session only | No                                       |
 | Automatic | `set_autocaching!`           | Across sessions | Yes                                      |
 
+
 ## Motivation
 
 This package is generally useful anywhere and everywhere disk-based memoization and caching are required (e.g. analytics, informatics, or software development projects, where databases or computationally expensive functions are frequently queried identically multiple times for the exact same results, and in which backend data query results are not expected to change between (manual) cache refresh operations, or it does not matter if they do.
@@ -73,6 +74,14 @@ Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 ```
 
 ---
+
+## Documentation
+
+This README provides a summary of the major features and usage of this package.
+The full API documentation can be found [here](https://juliadata.org/DataCaches.jl): 
+
+<https://juliadata.org/DataCaches.jl>
+
 
 ## Quick Start
 
