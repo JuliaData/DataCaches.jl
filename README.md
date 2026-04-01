@@ -313,12 +313,6 @@ The wrapper body has three moving parts:
 
 ---
 
-## Full API Reference
-
-The complete API reference is available in the [package documentation](https://JuliaData.github.io/DataCaches.jl/stable).
-
----
-
 ## Comparison of caching strategies
 
 | | `dc["label"] = ...` | `@filecache` | `@memcache` | `set_autocaching!` |
@@ -334,7 +328,7 @@ The complete API reference is available in the [package documentation](https://J
 
 ## Documentation
 
-The API reference is hosted online at <https://juliadata.org/DataCaches.jl>.
+The full API reference is hosted online at <https://juliadata.org/DataCaches.jl>.
 
 To build the documentation locally, run from the repository root:
 
