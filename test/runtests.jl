@@ -240,4 +240,43 @@ using TOML
         end
     end
 
+    @testset "read and getindex by sequence index" begin
+        mktempdir() do dir
+            c = DataCache(dir)
+            write!(c, [1, 2, 3]; label = "first")
+            write!(c, [4, 5, 6]; label = "second")
+
+            @test Base.read(c, 1) == [1, 2, 3]
+            @test Base.read(c, 2) == [4, 5, 6]
+
+            @test c[1] == [1, 2, 3]
+            @test c[2] == [4, 5, 6]
+
+            @test_throws ErrorException c[99]
+        end
+    end
+
+    @testset "seq index stable after deletion" begin
+        mktempdir() do dir
+            c = DataCache(dir)
+            write!(c, "a"; label = "first")
+            write!(c, "b"; label = "second")
+            write!(c, "c"; label = "third")
+            delete!(c, "second")
+            @test c[1] == "a"
+            @test c[3] == "c"
+            @test_throws ErrorException c[2]
+        end
+    end
+
+    @testset "seq index survives reload" begin
+        mktempdir() do dir
+            c1 = DataCache(dir)
+            write!(c1, [9, 8, 7]; label = "persist_seq")
+            seq = only(values(c1._index)).seq
+            c2 = DataCache(dir)
+            @test c2[seq] == [9, 8, 7]
+        end
+    end
+
 end

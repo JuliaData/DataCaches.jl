@@ -128,9 +128,13 @@ dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
 dc["canidae_occs"]  = pbdb_occurrences(base_name = "Canidae", show = "full")
 dc["dinosaur_taxa"] = pbdb_taxa(name = "Dinosauria", vocab = "pbdb")
 
-# Retrieve
+# Retrieve by label
 occs = dc["canidae_occs"]
 taxa = dc["dinosaur_taxa"]
+
+# Retrieve by sequence index (as shown in showcache output)
+occs = dc[1]
+taxa = dc[2]
 
 # Conditionally fetch
 if !haskey(dc, "trilobites")
@@ -155,6 +159,9 @@ showcache(dc)
 # Rename a label
 relabel!(dc, "canidae_occs", "canidae")   # by label
 relabel!(dc, 2, "canidae")                # by sequence index
+
+# Retrieve by sequence index
+df = dc[1]
 
 # Remove entries
 delete!(dc, "trilobites")   # by label

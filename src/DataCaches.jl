@@ -268,8 +268,11 @@ end
 """
     read(cache::DataCache, key::CacheKey) → data
     read(cache::DataCache, label::AbstractString) → data
+    read(cache::DataCache, n::Integer) → data
 
-Retrieve a cached dataset by [`CacheKey`](@ref) or label string.
+Retrieve a cached dataset by [`CacheKey`](@ref), label string, or stable sequence
+index. The `Integer` form uses the sequence index shown in brackets by `showcache`
+(e.g. `[1]`, `[2]`). Use `reindexcache!` to compact gaps after many deletions.
 """
 function Base.read(cache::DataCache, key::CacheKey)
     isfile(key.path) || error("Cache file missing: $(key.path)")
@@ -282,8 +285,15 @@ function Base.read(cache::DataCache, lbl::AbstractString)
     return Base.read(cache, cache._index[id])
 end
 
+function Base.read(cache::DataCache, n::Integer)
+    key = _resolve_by_seq(cache, Int(n))
+    isnothing(key) && error("No cache entry with sequence index $n")
+    return Base.read(cache, key)
+end
+
 Base.getindex(cache::DataCache, lbl::AbstractString) = Base.read(cache, lbl)
 Base.getindex(cache::DataCache, key::CacheKey)        = Base.read(cache, key)
+Base.getindex(cache::DataCache, n::Integer)           = Base.read(cache, n)
 Base.setindex!(cache::DataCache, data, lbl::AbstractString) = write!(cache, data; label = lbl)
 
 # --- Introspection -----------------------------------------------------------
