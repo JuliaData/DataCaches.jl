@@ -102,6 +102,9 @@ Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 using DataCaches
 using PaleobiologDB # For example
 
+# Optional: track caching operations in debug logs
+ENV["JULIA_DEBUG"] = "DataCaches"
+
 # Create a cache backed by a directory on disk
 dc = DataCache(joinpath(homedir(), ".datacaches", "myproject"))
 
@@ -121,6 +124,9 @@ retrieved, using dictionary-style indexing. Works with any data source.
 
 ```julia
 using DataCaches, PaleobiologyDB
+
+# Optional: track caching operations in debug logs
+ENV["JULIA_DEBUG"] = "DataCaches"
 
 dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
 
@@ -187,6 +193,9 @@ integration required on the library's part.
 ```julia
 using DataCaches, PaleobiologyDB
 
+# Optional: track caching operations in debug logs
+ENV["JULIA_DEBUG"] = "DataCaches"
+
 dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
 set_default_filecache!(dc)
 
@@ -246,6 +255,9 @@ alternative — or you can write a thin wrapper yourself (shown below).
 
 ```julia
 using DataCaches, PaleobiologyDB
+
+# Optional: track caching operations in debug logs
+ENV["JULIA_DEBUG"] = "DataCaches"
 
 dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
 set_autocaching!(true; cache = dc)
