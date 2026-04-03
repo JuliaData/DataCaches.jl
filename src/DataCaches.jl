@@ -82,8 +82,10 @@ Data is persisted in `store` as CSV files (for `DataFrame` values) or
 serialized Julia objects (`.jls`) for anything else. An index file
 (`cache_index.toml`) in `store` keeps track of all entries.
 
-The default store directory is `\$HOME/.cache/DataCaches/_DEFAULT/` (overridden
-by the `DATACACHES_DEFAULT_STORE` environment variable).
+When called with no argument, the store is a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl)
+scratch space under the active Julia depot (`~/.julia/scratchspaces/<DataCaches-UUID>/default/`),
+which is automatically cleaned up if DataCaches.jl is uninstalled and `Pkg.gc()` is run.
+Set the `DATACACHES_DEFAULT_STORE` environment variable to override this location.
 
 # Examples
 ```julia
@@ -572,7 +574,8 @@ const _autocache_funcs_ref   = Ref{Union{Nothing,Set{Any}}}(nothing)
     default_filecache() → DataCache
 
 Return the module-level default [`DataCache`](@ref) used by [`@filecache`](@ref).
-Created lazily on first access (store: `~/.cache/DataCaches/_DEFAULT` by default).
+Created lazily on first access using the default Scratch.jl-backed store
+(see [`DataCache`](@ref) for details on the default location).
 """
 function default_filecache()
     if isnothing(_filecache_ref[])
