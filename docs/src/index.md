@@ -12,14 +12,14 @@ A lightweight, file-backed key-value cache for Julia workflows that make
 frequent expensive function calls (remote API queries, long-running
 computations) and need results available across Julia sessions.
 
-Three caching levels are provided, from manual to fully automatic:
+Three caching levels are provided, from fully automatic to manual:
 
 | Level     | Mechanism              | Persistence      | Library integration required? |
 |-----------|------------------------|------------------|-------------------------------|
-| Explicit  | `dc["label"] = result` | Across sessions  | No                            |
+| Automatic | `set_autocaching!`     | Across sessions  | Yes (or thin wrapper)         |
 | Memoized  | `@filecache`           | Across sessions  | No                            |
 | Memoized  | `@memcache`            | In-session only  | No                            |
-| Automatic | `set_autocaching!`        | Across sessions  | Yes                           |
+| Explicit  | `dc["label"] = result` | Across sessions  | No                            |
 
 ## Installation
 
@@ -31,11 +31,23 @@ pkg> add DataCaches
 
 ## Quick Start
 
+The simplest path requires no path management. Use `DataCache()` with no arguments for a lifecycle-managed default store, then enable automatic caching:
+
 ```julia
 using DataCaches
 
-dc = DataCache(joinpath(homedir(), ".datacaches", "myproject"))
+dc = DataCache()
+set_autocaching!(true; cache = dc)
 
+# Instrumented functions now cache transparently — no call-site changes
+result = some_expensive_query(; taxon = "Dinosauria")  # fetches + stores
+result = some_expensive_query(; taxon = "Dinosauria")  # instant, from cache
+```
+
+For manual control with explicit labels:
+
+```julia
+dc = DataCache(joinpath(homedir(), ".datacaches", "myproject"))
 dc["dinosaurs"] = some_expensive_query(; taxon = "Dinosauria")
 df = dc["dinosaurs"]
 ```
