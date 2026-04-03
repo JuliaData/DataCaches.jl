@@ -171,7 +171,7 @@ function DataCache(key::Symbol)
 end
 
 """
-    scratch_datacache(pkg_uuid::Base.UUID, key::AbstractString="datacache") → DataCache
+    scratch_datacache(pkg_uuid::Base.UUID, key::AbstractString = "datacache") → DataCache
 
 Create a [`DataCache`](@ref) backed by a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl)
 scratch space namespaced to `pkg_uuid` and `key`.
@@ -199,7 +199,7 @@ end
 
 Multiple independent cache stores can be created by using different `key` values.
 """
-function scratch_datacache(pkg_uuid::Base.UUID, key::AbstractString="datacache")
+function scratch_datacache(pkg_uuid::Base.UUID, key::AbstractString = "datacache")
     store = Scratch.get_scratch!(pkg_uuid, key)
     return DataCache(store)
 end
@@ -631,7 +631,7 @@ function memcache_clear!()
 end
 
 """
-    set_autocaching!(enabled::Bool; cache::Union{DataCache,Nothing}=nothing) -> Union{DataCache,Nothing}
+    set_autocaching!(enabled::Bool; cache::Union{DataCache,Nothing} = nothing) → Union{DataCache,Nothing}
 
 Enable or disable automatic caching for **all** `pbdb_*` API functions.
 
@@ -648,7 +648,7 @@ DataCaches.set_autocaching!(false)
 DataCaches.set_autocaching!(true; cache=DataCache("/my/project/cache"))
 ```
 """
-function set_autocaching!(enabled::Bool; cache::Union{DataCache,Nothing}=nothing)
+function set_autocaching!(enabled::Bool; cache::Union{DataCache,Nothing} = nothing)
     _autocache_enabled_ref[] = enabled
     _autocache_funcs_ref[]   = nothing  # global mode
     if enabled
@@ -660,8 +660,8 @@ function set_autocaching!(enabled::Bool; cache::Union{DataCache,Nothing}=nothing
 end
 
 """
-    set_autocaching!(enabled::Bool, func; cache::Union{DataCache,Nothing}=nothing) -> Union{DataCache,Nothing}
-    set_autocaching!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache,Nothing}=nothing) -> Union{DataCache,Nothing}
+    set_autocaching!(enabled::Bool, func; cache::Union{DataCache,Nothing} = nothing) → Union{DataCache,Nothing}
+    set_autocaching!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache,Nothing} = nothing) → Union{DataCache,Nothing}
 
 Enable or disable automatic caching for a specific function (or list of functions).
 
@@ -684,7 +684,7 @@ DataCaches.set_autocaching!(true, [pbdb_occurrences, pbdb_taxa])
 DataCaches.set_autocaching!(false, pbdb_occurrences)
 ```
 """
-function set_autocaching!(enabled::Bool, func; cache::Union{DataCache,Nothing}=nothing)
+function set_autocaching!(enabled::Bool, func; cache::Union{DataCache,Nothing} = nothing)
     if enabled
         _autocache_enabled_ref[] = true
         if isnothing(_autocache_cache_ref[]) || !isnothing(cache)
@@ -713,7 +713,7 @@ function set_autocaching!(enabled::Bool, func; cache::Union{DataCache,Nothing}=n
     return _autocache_cache_ref[]
 end
 
-function set_autocaching!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache,Nothing}=nothing)
+function set_autocaching!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache,Nothing} = nothing)
     for f in funcs
         set_autocaching!(enabled, f; cache=cache)
     end
