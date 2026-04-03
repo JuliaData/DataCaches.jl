@@ -31,7 +31,7 @@ pwd(name::Symbol) = joinpath(_root(), string(name))
 """
     DataCaches.Depot.defaultstore() → String
 
-Return the absolute path to the default [`DataCache`](@ref) store.
+Return the absolute path to the default [`DataCache`](@ref DataCaches.DataCache) store.
 
 Respects the `DATACACHES_DEFAULT_STORE` environment variable; otherwise returns
 the path of the `"default"` named store inside the depot root.
@@ -46,7 +46,7 @@ end
 """
     DataCaches.Depot.ls() → Vector{String}
 
-List the names of all [`DataCache`](@ref) stores currently in the depot.
+List the names of all [`DataCache`](@ref DataCaches.DataCache) stores currently in the depot.
 
 Only lists stores created via `DataCache(:name)` or by placing a directory in the
 DataCaches scratchspace. Does not include caches at explicit filesystem paths or those
