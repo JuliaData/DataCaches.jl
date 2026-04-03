@@ -74,6 +74,7 @@ end
 
 """
     DataCache([store::AbstractString])
+    DataCache(key::Symbol)
 
 A labeled, file-backed key-value store for caching query results across
 Julia sessions.
@@ -82,15 +83,36 @@ Data is persisted in `store` as CSV files (for `DataFrame` values) or
 serialized Julia objects (`.jls`) for anything else. An index file
 (`cache_index.toml`) in `store` keeps track of all entries.
 
-When called with no argument, the store is a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl)
+**No argument:** the store is a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl)
 scratch space under the active Julia depot (`~/.julia/scratchspaces/<DataCaches-UUID>/default/`),
-which is automatically cleaned up if DataCaches.jl is uninstalled and `Pkg.gc()` is run.
+automatically cleaned up if DataCaches.jl is uninstalled and `Pkg.gc()` is run.
 Set the `DATACACHES_DEFAULT_STORE` environment variable to override this location.
+
+**Symbol argument (`DataCache(:name)`):** creates a named scratch space within
+DataCaches.jl's own depot directory (`~/.julia/scratchspaces/<DataCaches-UUID>/<name>/`).
+The cache is automatically removed along with DataCaches.jl when the package is uninstalled.
+This is the recommended approach for users and library authors who want a persistent,
+named cache without managing filesystem paths or package UUIDs:
+
+```julia
+# User: a named project cache in DataCaches' scratchspace
+dc = DataCache(:myproject)
+
+# Library author: lifecycle-managed cache in __init__
+const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
+function __init__()
+    _CACHE[] = DataCache(:mypackage_results)
+end
+```
+
+Use [`scratch_datacache`](@ref) instead when you need the cache tied to *your own*
+package's lifecycle rather than DataCaches.jl's.
 
 # Examples
 ```julia
-cache = DataCache()
-cache = DataCache("/my/project/cache")
+cache = DataCache()               # default Scratch.jl-backed store
+cache = DataCache(:myproject)     # named store in DataCaches' scratchspace
+cache = DataCache("/my/project/cache")  # explicit filesystem path
 
 # Write
 key = write!(cache, df)
@@ -141,6 +163,11 @@ function DataCache(store::AbstractString = _default_cache_dir())
     cache = DataCache(store, Dict{String,CacheKey}(), Dict{String,String}(), 1)
     _load_index!(cache)
     return cache
+end
+
+function DataCache(key::Symbol)
+    store = Scratch.get_scratch!(_DATACACHES_UUID, string(key))
+    return DataCache(store)
 end
 
 """

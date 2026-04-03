@@ -382,9 +382,40 @@ See [`test/README.md`](test/README.md) for more options.
 
 When `DATACACHES_DEFAULT_STORE` is not set, the no-argument `DataCache()` constructor stores its data in a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) scratch space under the active Julia depot (`~/.julia/scratchspaces/<DataCaches-UUID>/default/`). This integrates with Julia's package manager: the default cache is automatically removed if DataCaches.jl is ever uninstalled and `Pkg.gc()` is run.
 
-## Using DataCaches.jl inside a package
+## Named scratch-backed caches
 
-When building a Julia package that uses DataCaches.jl for internal caching, use `scratch_datacache` to create a store whose lifetime is tied to your package:
+Pass a `Symbol` to `DataCache` to create a named cache within DataCaches.jl's own
+[Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) depot directory. No path
+management or UUIDs required, and the cache is automatically removed if DataCaches.jl
+is uninstalled:
+
+```julia
+dc = DataCache(:myproject)
+```
+
+The store lives at `~/.julia/scratchspaces/<DataCaches-UUID>/myproject/`. Multiple
+independent stores are created by using different symbols:
+
+```julia
+queries = DataCache(:pbdb_queries)
+taxa    = DataCache(:taxonomy)
+```
+
+This form is also convenient for library authors who want a lifecycle-managed cache
+without introducing their own scratch space:
+
+```julia
+const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
+function __init__()
+    _CACHE[] = DataCache(:mypackage_results)
+end
+```
+
+## Using DataCaches.jl inside a package (own lifecycle)
+
+If you need the cache tied to *your own* package's lifecycle (removed when *your* package
+is uninstalled, independently of DataCaches.jl), use `scratch_datacache` with your
+package's UUID:
 
 ```julia
 module MyPackage

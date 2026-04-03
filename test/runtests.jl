@@ -317,6 +317,36 @@ using TOML
             c2 = scratch_datacache(test_uuid, "datacache")
             @test c1.store == c2.store
         end
+
+        @testset "DataCache(:key) creates named store in DataCaches scratchspace" begin
+            depot_scratch = joinpath(first(Base.DEPOT_PATH), "scratchspaces")
+            datacaches_uuid = string(Base.UUID("c1455f2b-6d6f-4f37-b463-919f923708a5"))
+            c = DataCache(:test_named_store)
+            @test c isa DataCache
+            @test isdir(c.store)
+            @test startswith(c.store, joinpath(depot_scratch, datacaches_uuid))
+            @test endswith(c.store, "test_named_store")
+        end
+
+        @testset "DataCache(:key) is isolated from DataCache(:other_key)" begin
+            c1 = DataCache(:named_store_a)
+            c2 = DataCache(:named_store_b)
+            @test c1.store != c2.store
+        end
+
+        @testset "DataCache(:key) is consistent across calls" begin
+            c1 = DataCache(:consistency_check)
+            c2 = DataCache(:consistency_check)
+            @test c1.store == c2.store
+        end
+
+        @testset "DataCache(:key) is functional" begin
+            c = DataCache(:functional_test_store)
+            write!(c, [10, 20, 30]; label = "named_entry")
+            @test haskey(c, "named_entry")
+            c2 = DataCache(:functional_test_store)
+            @test c2["named_entry"] == [10, 20, 30]
+        end
     end
 
 end
