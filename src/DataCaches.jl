@@ -6,7 +6,6 @@ using Dates
 using Downloads
 import TOML
 using Serialization
-using Scratch
 using UUIDs
 using ZipFile
 
@@ -85,13 +84,13 @@ Data is persisted in `store` as CSV files (for `DataFrame` values) or
 serialized Julia objects (`.jls`) for anything else. An index file
 (`cache_index.toml`) in `store` keeps track of all entries.
 
-**No argument:** the store is a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl)
-scratch space under the active Julia depot (`~/.julia/scratchspaces/<DataCaches-UUID>/default/`),
+**No argument:** the store is placed under DataCaches' depot at
+`~/.julia/scratchspaces/<DataCaches-UUID>/caches/defaultcache/`,
 automatically cleaned up if DataCaches.jl is uninstalled and `Pkg.gc()` is run.
 Set the `DATACACHES_DEFAULT_STORE` environment variable to override this location.
 
-**Symbol argument (`DataCache(:name)`):** creates a named scratch space within
-DataCaches.jl's own depot directory (`~/.julia/scratchspaces/<DataCaches-UUID>/<name>/`).
+**Symbol argument (`DataCache(:name)`):** creates a named local store within
+DataCaches.jl's own depot directory (`~/.julia/scratchspaces/<DataCaches-UUID>/caches/local/<name>/`).
 The cache is automatically removed along with DataCaches.jl when the package is uninstalled.
 This is the recommended approach for users and library authors who want a persistent,
 named cache without managing filesystem paths or package UUIDs:
@@ -153,10 +152,10 @@ const _INDEX_FILENAME = "cache_index.toml"
 const _DATACACHES_UUID = Base.UUID("c1455f2b-6d6f-4f37-b463-919f923708a5")
 
 function _default_cache_dir()
-    if haskey(ENV, "DATACACHES_DEFAULT_STORE")
-        return ENV["DATACACHES_DEFAULT_STORE"]
-    end
-    return Scratch.get_scratch!(_DATACACHES_UUID, "default")
+    haskey(ENV, "DATACACHES_DEFAULT_STORE") && return ENV["DATACACHES_DEFAULT_STORE"]
+    store = joinpath(Depot._caches_dir(), "defaultcache")
+    mkpath(store)
+    return store
 end
 
 function DataCache(store::AbstractString = _default_cache_dir())
@@ -168,21 +167,21 @@ function DataCache(store::AbstractString = _default_cache_dir())
 end
 
 function DataCache(key::Symbol)
-    store = Scratch.get_scratch!(_DATACACHES_UUID, string(key))
+    store = joinpath(Depot._local_dir(), string(key))
     return DataCache(store)
 end
 
 """
     scratch_datacache!(pkg_uuid::Base.UUID, key::AbstractString = "datacache") → DataCache
 
-Create a [`DataCache`](@ref) backed by a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl)
-scratch space namespaced to `pkg_uuid` and `key`.
+Create a [`DataCache`](@ref) stored under DataCaches' own depot, namespaced by
+`pkg_uuid` and `key`, at `<depot>/caches/module/<pkg_uuid>/<key>/`.
 
-The scratch space lives under the active Julia depot
-(`~/.julia/scratchspaces/<pkg_uuid>/<key>/`) and is automatically removed when the
-owning package is uninstalled and `Pkg.gc()` is run.
+The store is managed as part of the DataCaches depot (cleaned up when DataCaches
+is uninstalled), not the calling package's own lifecycle. Use different `key`
+values to create multiple independent stores for the same package UUID.
 
-Use this in a package's `__init__` to create a lifecycle-managed cache:
+Use this in a package's `__init__` to create a named, module-scoped cache:
 
 ```julia
 module MyPackage
@@ -198,11 +197,10 @@ end
 get_cache() = _CACHE[]
 end
 ```
-
-Multiple independent cache stores can be created by using different `key` values.
 """
 function scratch_datacache!(pkg_uuid::Base.UUID, key::AbstractString = "datacache")
-    store = Scratch.get_scratch!(pkg_uuid, key)
+    store = joinpath(Depot._module_dir(), string(pkg_uuid), key)
+    mkpath(store)
     return DataCache(store)
 end
 
@@ -1032,6 +1030,7 @@ macro filecache(cache, expr)
 end
 
 include("Depot.jl")
+Depot._datacache_ctor[] = DataCache
 include("_migrate_legacy_defaultcache.jl")
 
 end # module

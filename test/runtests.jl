@@ -303,9 +303,10 @@ using ZipFile
             c = scratch_datacache!(test_uuid, "test_scratch_key")
             @test c isa DataCache
             @test isdir(c.store)
-            # The store should be inside the depot scratchspaces under the test UUID
+            # The store should be inside the DataCaches depot under caches/module/
             depot_scratch = joinpath(first(Base.DEPOT_PATH), "scratchspaces")
             @test startswith(c.store, depot_scratch)
+            @test occursin(joinpath("caches", "module"), c.store)
             # Verify it works as a normal DataCache
             write!(c, [1, 2, 3]; label = "scratch_test_entry")
             @test haskey(c, "scratch_test_entry")
@@ -326,6 +327,7 @@ using ZipFile
             @test c isa DataCache
             @test isdir(c.store)
             @test startswith(c.store, joinpath(depot_scratch, datacaches_uuid))
+            @test occursin(joinpath("caches", "local"), c.store)
             @test endswith(c.store, "test_named_store")
         end
 
@@ -556,7 +558,7 @@ using ZipFile
         @testset "pwd(::Symbol) returns named store path inside depot" begin
             root = DataCaches.Depot.pwd()
             named = DataCaches.Depot.pwd(:mytest)
-            @test named == joinpath(root, "mytest")
+            @test named == joinpath(root, "caches", "local", "mytest")
         end
 
         @testset "defaultstore() respects DATACACHES_DEFAULT_STORE env var" begin
@@ -567,10 +569,10 @@ using ZipFile
             end
         end
 
-        @testset "defaultstore() falls back to depot/default" begin
+        @testset "defaultstore() falls back to depot/caches/defaultcache" begin
             withenv("DATACACHES_DEFAULT_STORE" => nothing) do
                 ds = DataCaches.Depot.defaultstore()
-                @test endswith(ds, joinpath("c1455f2b-6d6f-4f37-b463-919f923708a5", "default"))
+                @test endswith(ds, joinpath("c1455f2b-6d6f-4f37-b463-919f923708a5", "caches", "defaultcache"))
             end
         end
 
@@ -710,6 +712,28 @@ using ZipFile
                 DataCaches.Depot.rm(:_depot_cp_import_dst)
             end
         end
+
+        @testset "test_datacache! creates cache in test area" begin
+            c = DataCaches.Depot.test_datacache!(:_test_area_store)
+            @test c isa DataCache
+            @test isdir(c.store)
+            @test occursin(joinpath("test", "caches"), c.store)
+            @test endswith(c.store, "_test_area_store")
+            # not visible in ls(:local)
+            @test !("_test_area_store" in DataCaches.Depot.ls(:local))
+            write!(c, [99]; label = "test_area_entry")
+            @test c["test_area_entry"] == [99]
+        end
+
+        @testset "cleanuptests() removes test cache directory" begin
+            DataCaches.Depot.test_datacache!(:_cleanup_target)
+            test_dir = joinpath(DataCaches.Depot.pwd(), "test", "caches")
+            @test isdir(test_dir)
+            DataCaches.Depot.cleanuptests()
+            @test !isdir(test_dir)
+        end
+
+        DataCaches.Depot.cleanuptests()
 
     end
 
