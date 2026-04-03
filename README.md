@@ -32,7 +32,7 @@ This keeps exploratory and instructional code clean and readable, with caching r
 
 DataCaches.jl provides three complementary interfaces aligned with its [purpose](#Purpose): 
 
-- a fully seamless mode in which (instrumented) function calls are cached on first execution and transparently retrieved thereafter
+- a fully seamless mode in which specialy-instrumented or wrapped function calls (see below) are cached on first execution and transparently retrieved thereafter
 
 ```julia
 # Automatically cache all instrumented functions.
@@ -45,7 +45,7 @@ foo = func1(x, y)
 bar = func1(x, y) 
 ```
 
-- a lightweight memoization mechanism enabling selective, automated caching of function call (and particular combination of run time argument values).
+- a lightweight memoization mechanism, not requiring any function instrumentation and wrapping, enabling selective, automated caching of function call (and particular combination of run time argument values).
 
 ```julia
 # If the active disk cache does not have this particular 
@@ -56,7 +56,7 @@ foo = @filecache func1(x, y)
 bar = @filecache func1(x, y) 
 ```
 
-- and an explicit Dict-style API for manual cache control
+- and an explicit straightforward Dict-style API for manual cache asset control
 
 ```julia
 # Just like a `Dict`, but auto-persists across sessions.
