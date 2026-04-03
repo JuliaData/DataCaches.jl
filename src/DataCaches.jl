@@ -3,10 +3,12 @@ module DataCaches
 using CSV
 using DataFrames
 using Dates
+using Downloads
 import TOML
 using Serialization
 using Scratch
 using UUIDs
+using ZipFile
 
 export DataCache, CacheKey
 export write!, relabel!, reindexcache!, keylabels, keypaths, clear!, showcache, label, path
@@ -14,7 +16,7 @@ export @filecache, @memcache
 export default_filecache, set_default_filecache!, memcache_clear!
 export set_autocaching!
 export autocache
-export scratch_datacache
+export scratch_datacache!
 
 # =============================================================================
 # CacheKey
@@ -105,7 +107,7 @@ function __init__()
 end
 ```
 
-Use [`scratch_datacache`](@ref) instead when you need the cache tied to *your own*
+Use [`scratch_datacache!`](@ref) instead when you need the cache tied to *your own*
 package's lifecycle rather than DataCaches.jl's.
 
 # Examples
@@ -171,7 +173,7 @@ function DataCache(key::Symbol)
 end
 
 """
-    scratch_datacache(pkg_uuid::Base.UUID, key::AbstractString = "datacache") → DataCache
+    scratch_datacache!(pkg_uuid::Base.UUID, key::AbstractString = "datacache") → DataCache
 
 Create a [`DataCache`](@ref) backed by a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl)
 scratch space namespaced to `pkg_uuid` and `key`.
@@ -190,7 +192,7 @@ const _MY_UUID = Base.UUID("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")  # match Proj
 const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
 
 function __init__()
-    _CACHE[] = DataCaches.scratch_datacache(_MY_UUID, "results")
+    _CACHE[] = DataCaches.scratch_datacache!(_MY_UUID, "results")
 end
 
 get_cache() = _CACHE[]
@@ -199,7 +201,7 @@ end
 
 Multiple independent cache stores can be created by using different `key` values.
 """
-function scratch_datacache(pkg_uuid::Base.UUID, key::AbstractString = "datacache")
+function scratch_datacache!(pkg_uuid::Base.UUID, key::AbstractString = "datacache")
     store = Scratch.get_scratch!(pkg_uuid, key)
     return DataCache(store)
 end
@@ -551,6 +553,142 @@ function reindexcache!(cache::DataCache)
     cache._next_seq = length(sorted) + 1
     _save_index(cache)
     return cache
+end
+
+# =============================================================================
+# Cache management — move and import
+# =============================================================================
+
+public movecache!
+public importcache!
+
+"""
+    DataCaches.movecache!(cache::DataCache, new_path::AbstractString) → DataCache
+
+Move the cache's underlying store directory to `new_path`, updating `cache.store`.
+
+Because `cache_index.toml` stores paths as relative paths, the TOML file does not need
+rewriting. In-memory `CacheKey.path` fields (which are absolute) are updated in place.
+
+  - If `new_path` does not exist, it is created (including any missing parent directories).
+  - If `new_path == abspath(cache.store)`, returns `cache` unchanged (no-op).
+  - If `new_path` already exists (and differs), throws an error.
+
+The move is performed with `Base.mv`, which copies then deletes across filesystem boundaries.
+"""
+function movecache!(cache::DataCache, new_path::AbstractString)
+    src = cache.store
+    dst = abspath(new_path)
+    src == dst && return cache
+
+    isdir(dst) && error(
+        "Destination already exists: $(repr(dst)). Remove it first or choose a different path."
+    )
+
+    mkpath(dirname(dst))
+    mv(src, dst)
+    cache.store = dst
+
+    # Update in-memory absolute paths; TOML uses relative paths and moved with the dir.
+    for (id, key) in cache._index
+        new_abs = joinpath(dst, relpath(key.path, src))
+        cache._index[id] = CacheKey(key.id, key.seq, key.label, new_abs,
+                                    key.description, key.datecached)
+    end
+    return cache
+end
+
+"""
+    DataCaches.importcache!(dest::DataCache, source; conflict=:overwrite) → DataCache
+
+Import all entries from an external cache `source` into `dest`.
+
+`source` can be:
+
+  - A **filesystem directory** containing a DataCache store (`cache_index.toml` at its root).
+  - A **`.zip` file** containing a DataCache store at its root.
+  - An **HTTP/HTTPS URL** pointing to a `.zip` file; downloaded to a temp location first.
+
+The `conflict` keyword controls behavior when an entry in `source` has the same label as
+an existing entry in `dest`:
+
+  - `:overwrite` (default) — replace the existing entry with the imported one.
+  - `:skip` — keep the existing entry, discard the incoming one.
+  - `:error` — raise an `ErrorException` immediately on conflict.
+
+Unlabeled entries are always imported regardless of `conflict`. Imported entries receive
+a new UUID, sequence number, and `datecached` timestamp in `dest`. Returns `dest`.
+"""
+function importcache!(dest::DataCache, source::AbstractString;
+                      conflict::Symbol = :overwrite)
+    conflict in (:overwrite, :skip, :error) || error(
+        "conflict must be :overwrite, :skip, or :error; got $(repr(conflict))"
+    )
+    resolved = _resolve_import_source(source)
+    try
+        _do_import!(dest, resolved.path; conflict=conflict)
+    finally
+        resolved.is_temp && rm(resolved.path; recursive=true, force=true)
+    end
+    return dest
+end
+
+function _resolve_import_source(source::AbstractString)
+    if startswith(source, "http://") || startswith(source, "https://")
+        endswith(lowercase(source), ".zip") || error(
+            "URL imports must point to a .zip file; got: $(repr(source))"
+        )
+        tmp = mktempdir()
+        zip_path = joinpath(tmp, "download.zip")
+        Downloads.download(source, zip_path)
+        extract_dir = mktempdir()
+        rm(tmp; recursive=true)
+        _extract_zip(zip_path, extract_dir)
+        return (path=extract_dir, is_temp=true)
+    elseif endswith(lowercase(source), ".zip")
+        isfile(source) || error("Zip file not found: $(repr(source))")
+        extract_dir = mktempdir()
+        _extract_zip(source, extract_dir)
+        return (path=extract_dir, is_temp=true)
+    else
+        isdir(source) || error("Import source directory not found: $(repr(source))")
+        return (path=source, is_temp=false)
+    end
+end
+
+function _extract_zip(zip_path::AbstractString, dest_dir::AbstractString)
+    mkpath(dest_dir)
+    zf = ZipFile.Reader(zip_path)
+    try
+        for f in zf.files
+            outpath = joinpath(dest_dir, f.name)
+            if endswith(f.name, "/")
+                mkpath(outpath)
+            else
+                mkpath(dirname(outpath))
+                write(outpath, read(f))
+            end
+        end
+    finally
+        close(zf)
+    end
+end
+
+function _do_import!(dest::DataCache, src_dir::AbstractString; conflict::Symbol)
+    src = DataCache(src_dir)
+    for (_, src_key) in src._index
+        lbl = src_key.label
+        if !isempty(lbl) && haskey(dest._by_label, lbl)
+            if conflict == :error
+                error("Label conflict during import: $(repr(lbl)) already exists in destination")
+            elseif conflict == :skip
+                continue
+            end
+            # :overwrite — write! will replace the existing entry
+        end
+        data = _read_file(src_key)
+        write!(dest, data; label=lbl, description=src_key.description)
+    end
 end
 
 """

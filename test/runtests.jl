@@ -2,6 +2,7 @@ using Test
 using DataCaches
 using DataFrames
 using TOML
+using ZipFile
 
 @testset "DataCaches" begin
 
@@ -297,9 +298,9 @@ using TOML
             end
         end
 
-        @testset "scratch_datacache creates a functional DataCache" begin
+        @testset "scratch_datacache! creates a functional DataCache" begin
             test_uuid = Base.UUID("00000000-0000-0000-0000-000000000001")
-            c = scratch_datacache(test_uuid, "test_scratch_key")
+            c = scratch_datacache!(test_uuid, "test_scratch_key")
             @test c isa DataCache
             @test isdir(c.store)
             # The store should be inside the depot scratchspaces under the test UUID
@@ -311,10 +312,10 @@ using TOML
             @test c["scratch_test_entry"] == [1, 2, 3]
         end
 
-        @testset "scratch_datacache default key" begin
+        @testset "scratch_datacache! default key" begin
             test_uuid = Base.UUID("00000000-0000-0000-0000-000000000002")
-            c1 = scratch_datacache(test_uuid)
-            c2 = scratch_datacache(test_uuid, "datacache")
+            c1 = scratch_datacache!(test_uuid)
+            c2 = scratch_datacache!(test_uuid, "datacache")
             @test c1.store == c2.store
         end
 
@@ -347,6 +348,201 @@ using TOML
             c2 = DataCache(:functional_test_store)
             @test c2["named_entry"] == [10, 20, 30]
         end
+    end
+
+    @testset "movecache!" begin
+
+        @testset "moves store directory and updates cache.store" begin
+            mktempdir() do base
+                src = joinpath(base, "source_cache")
+                dst = joinpath(base, "dest_cache")
+                c = DataCache(src)
+                write!(c, [1, 2, 3]; label = "moved_entry")
+                original_store = c.store
+
+                DataCaches.movecache!(c, dst)
+
+                @test c.store == dst
+                @test isdir(dst)
+                @test !isdir(original_store)
+                @test haskey(c, "moved_entry")
+                @test Base.read(c, "moved_entry") == [1, 2, 3]
+            end
+        end
+
+        @testset "moved cache survives reload" begin
+            mktempdir() do base
+                src = joinpath(base, "src")
+                dst = joinpath(base, "dst")
+                c = DataCache(src)
+                write!(c, [9, 8, 7]; label = "persist_after_move")
+                DataCaches.movecache!(c, dst)
+
+                c2 = DataCache(dst)
+                @test haskey(c2, "persist_after_move")
+                @test c2["persist_after_move"] == [9, 8, 7]
+            end
+        end
+
+        @testset "same src and dst is a no-op" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 42; label = "noop_entry")
+                result = DataCaches.movecache!(c, dir)
+                @test result === c
+                @test c.store == abspath(dir)
+                @test haskey(c, "noop_entry")
+            end
+        end
+
+        @testset "errors if destination already exists" begin
+            mktempdir() do base
+                src = joinpath(base, "src")
+                dst = joinpath(base, "existing_dst")
+                mkpath(dst)
+                c = DataCache(src)
+                @test_throws ErrorException DataCaches.movecache!(c, dst)
+            end
+        end
+
+        @testset "creates missing parent directories" begin
+            mktempdir() do base
+                src = joinpath(base, "src")
+                dst = joinpath(base, "deep", "nested", "dst")
+                c = DataCache(src)
+                write!(c, "hello"; label = "deep_move")
+                DataCaches.movecache!(c, dst)
+                @test isdir(dst)
+                @test haskey(c, "deep_move")
+            end
+        end
+
+    end
+
+    @testset "importcache!" begin
+
+        @testset "imports labeled entries from directory" begin
+            mktempdir() do base
+                src_dir = joinpath(base, "source")
+                dst_dir = joinpath(base, "dest")
+                src = DataCache(src_dir)
+                write!(src, [1, 2, 3]; label = "alpha")
+                write!(src, [4, 5, 6]; label = "beta")
+
+                dst = DataCache(dst_dir)
+                DataCaches.importcache!(dst, src_dir)
+
+                @test haskey(dst, "alpha")
+                @test haskey(dst, "beta")
+                @test Base.read(dst, "alpha") == [1, 2, 3]
+                @test Base.read(dst, "beta")  == [4, 5, 6]
+            end
+        end
+
+        @testset "unlabeled entries always imported" begin
+            mktempdir() do base
+                src_dir = joinpath(base, "src")
+                dst_dir = joinpath(base, "dst")
+                src = DataCache(src_dir)
+                write!(src, [99, 98])
+
+                dst = DataCache(dst_dir)
+                DataCaches.importcache!(dst, src_dir)
+                @test length(dst) == 1
+                @test Base.read(dst, only(keys(dst))) == [99, 98]
+            end
+        end
+
+        @testset "conflict=:skip preserves existing entry" begin
+            mktempdir() do base
+                src_dir = joinpath(base, "src")
+                dst_dir = joinpath(base, "dst")
+                src = DataCache(src_dir)
+                write!(src, [1, 2]; label = "shared")
+
+                dst = DataCache(dst_dir)
+                write!(dst, [9, 9]; label = "shared")
+
+                DataCaches.importcache!(dst, src_dir; conflict = :skip)
+                @test Base.read(dst, "shared") == [9, 9]
+            end
+        end
+
+        @testset "conflict=:overwrite replaces existing entry" begin
+            mktempdir() do base
+                src_dir = joinpath(base, "src")
+                dst_dir = joinpath(base, "dst")
+                src = DataCache(src_dir)
+                write!(src, [1, 2]; label = "shared")
+
+                dst = DataCache(dst_dir)
+                write!(dst, [9, 9]; label = "shared")
+
+                DataCaches.importcache!(dst, src_dir; conflict = :overwrite)
+                @test Base.read(dst, "shared") == [1, 2]
+            end
+        end
+
+        @testset "conflict=:error raises on label conflict" begin
+            mktempdir() do base
+                src_dir = joinpath(base, "src")
+                dst_dir = joinpath(base, "dst")
+                src = DataCache(src_dir)
+                write!(src, [1, 2]; label = "conflict_label")
+
+                dst = DataCache(dst_dir)
+                write!(dst, [9, 9]; label = "conflict_label")
+
+                @test_throws ErrorException DataCaches.importcache!(dst, src_dir; conflict = :error)
+            end
+        end
+
+        @testset "invalid conflict keyword raises error" begin
+            mktempdir() do base
+                src = DataCache(joinpath(base, "src"))
+                dst = DataCache(joinpath(base, "dst"))
+                @test_throws ErrorException DataCaches.importcache!(dst, src.store; conflict = :invalid)
+            end
+        end
+
+        @testset "import from zip file" begin
+            mktempdir() do base
+                src_dir = joinpath(base, "src")
+                src = DataCache(src_dir)
+                write!(src, [10, 20]; label = "zipped_entry")
+
+                zip_path = joinpath(base, "cache.zip")
+                w = ZipFile.Writer(zip_path)
+                for fname in readdir(src_dir)
+                    fpath = joinpath(src_dir, fname)
+                    f = ZipFile.addfile(w, fname)
+                    write(f, read(fpath))
+                end
+                close(w)
+
+                dst = DataCache(joinpath(base, "dst"))
+                DataCaches.importcache!(dst, zip_path)
+                @test haskey(dst, "zipped_entry")
+                @test Base.read(dst, "zipped_entry") == [10, 20]
+            end
+        end
+
+        @testset "import persists to disk" begin
+            mktempdir() do base
+                src_dir = joinpath(base, "src")
+                dst_dir = joinpath(base, "dst")
+                src = DataCache(src_dir)
+                write!(src, [5, 6, 7]; label = "persisted")
+
+                dst = DataCache(dst_dir)
+                DataCaches.importcache!(dst, src_dir)
+
+                dst2 = DataCache(dst_dir)
+                @test haskey(dst2, "persisted")
+                @test dst2["persisted"] == [5, 6, 7]
+            end
+        end
+
     end
 
 end

@@ -414,7 +414,7 @@ end
 ## Using DataCaches.jl inside a package (own lifecycle)
 
 If you need the cache tied to *your own* package's lifecycle (removed when *your* package
-is uninstalled, independently of DataCaches.jl), use `scratch_datacache` with your
+is uninstalled, independently of DataCaches.jl), use `scratch_datacache!` with your
 package's UUID:
 
 ```julia
@@ -425,7 +425,7 @@ const _MY_UUID = Base.UUID("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")  # copy from 
 const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
 
 function __init__()
-    _CACHE[] = DataCaches.scratch_datacache(_MY_UUID, "results")
+    _CACHE[] = DataCaches.scratch_datacache!(_MY_UUID, "results")
 end
 
 get_cache() = _CACHE[]
