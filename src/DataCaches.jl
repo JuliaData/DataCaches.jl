@@ -561,6 +561,7 @@ end
 
 public movecache!
 public importcache!
+public Depot
 
 """
     DataCaches.movecache!(cache::DataCache, new_path::AbstractString) → DataCache
@@ -1029,5 +1030,7 @@ end
 macro filecache(cache, expr)
     return _filecache_impl(expr, esc(cache))
 end
+
+include("Depot.jl")
 
 end # module
