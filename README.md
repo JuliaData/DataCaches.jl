@@ -11,14 +11,14 @@ be available across Julia sessions.
 *Any* Julia object can be cached to disk to persist across sessions as `.jls` Julia serialized object files, but a special consideration is given to `DataFrame` objects as these are stored as `.csv` files, so they can also be independently inspected, accessed, and manipulated if needed.
 
 
-Three levels of caching are provided, from fully automatic to manual:
+Three levels of caching are provided, from lightest-weight to most manual:
 
-| Level     | Mechanism              | Persistence     | Wrapper or library integration required? |
-|-----------|------------------------|-----------------|------------------------------------------|
-| Automatic | `set_autocaching!`     | Across sessions | Yes (or thin wrapper)                    |
-| Memoized  | `@filecache`           | Across sessions | No                                       |
-| Memoized  | `@memcache`            | In-session only | No                                       |
-| Explicit  | `dc["label"] = result` | Across sessions | No                                       |
+| Level     | Mechanism              | Persistence     | Works with any function? |
+|-----------|------------------------|-----------------|--------------------------|
+| Memoized  | `@filecache`           | Across sessions | Yes                      |
+| Memoized  | `@memcache`            | In-session only | Yes                      |
+| Explicit  | `dc["label"] = result` | Across sessions | Yes                      |
+| Automatic | `set_autocaching!`     | Across sessions | Only if instrumented     |
 
 ## Purpose
 
@@ -30,22 +30,9 @@ This keeps exploratory and instructional code clean and readable, with caching r
 
 ## Features
 
-DataCaches.jl provides three complementary interfaces aligned with its [purpose](#Purpose): 
+DataCaches.jl provides three complementary interfaces aligned with its [purpose](#Purpose):
 
-- a fully seamless mode in which specialy-instrumented or wrapped function calls (see below) are cached on first execution and transparently retrieved thereafter
-
-```julia
-# Automatically cache all instrumented functions.
-set_autocaching!(true)
-# If the active disk cache does not have this particular 
-# combination of function name and argument values stored,
-# then the function will be evaluated, cached, and returned.
-foo = func1(x, y) 
-# Function not evaluated; cached result returned
-bar = func1(x, y) 
-```
-
-- a lightweight memoization mechanism, not requiring any function instrumentation and wrapping, enabling selective, automated caching of function call (and particular combination of run time argument values).
+- a lightweight memoization mechanism, not requiring any function instrumentation or wrapping, enabling selective, automated caching of any function call (keyed on the runtime values of all arguments)
 
 ```julia
 # If the active disk cache does not have this particular 
@@ -56,12 +43,21 @@ foo = @filecache func1(x, y)
 bar = @filecache func1(x, y) 
 ```
 
-- and an explicit straightforward Dict-style API for manual cache asset control
+- a straightforward Dict-style API for explicit, manual cache control
 
 ```julia
 # Just like a `Dict`, but auto-persists across sessions.
 cache["fig1"] = plot(...)
 fig1 = cache["fig1"] 
+```
+
+- a fully seamless mode in which specially-instrumented or wrapped function calls are cached on first execution and transparently retrieved thereafter, with no changes to call sites (see [Pattern 3 — Automatic caching](#pattern-3--automatic-caching))
+
+```julia
+# Once functions are instrumented (or wrapped), enable automatic caching:
+set_autocaching!(true)
+foo = func1(x, y)   # fetches + stores
+bar = func1(x, y)   # instant, from cache — call site unchanged
 ```
 
 with the following design principles:
@@ -98,31 +94,9 @@ Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 
 ## Quick Start
 
-The simplest way to get started requires no path management at all. Call `DataCache()` with no arguments for a lifecycle-managed default store, then enable automatic caching:
+### Cache store setup
 
-```julia
-using DataCaches
-using PaleobiologDB # For example
-
-# Optional: track caching operations in debug logs
-ENV["JULIA_DEBUG"] = "DataCaches"
-
-# Default store — no path needed
-dc = DataCache()
-set_autocaching!(true; cache = dc)
-
-# All instrumented functions now cache transparently
-occs = pbdb_occurrences(base_name = "Dinosauria", show = "full")  # fetches + stores
-df   = pbdb_occurrences(base_name = "Dinosauria", show = "full")  # instant, from cache
-```
-
-For manual control, see [Pattern 3 — Explicit label assignment](#pattern-3--explicit-label-assignment).
-
----
-
-## Cache Store
-
-Before choosing a caching pattern, choose where your cache lives. There is a gradient from zero-configuration to full control:
+Before caching anything, create a `DataCache`. There is a gradient from zero-configuration to full control:
 
 ```julia
 # Zero config — lifecycle-managed default store, no path required
@@ -138,25 +112,206 @@ dc = DataCache("/path/to/cache")
 dc = DataCaches.scratch_datacache!(MyPackage_UUID, "results")
 ```
 
-The first two forms (`DataCache()` and `DataCache(:name)`) live inside DataCaches.jl's
-own depot directory and are automatically removed if DataCaches.jl is ever uninstalled
-and `Pkg.gc()` is run — no manual cleanup required. The explicit path form is portable
-and can be shared by copying or archiving the directory.
+The first two forms live inside DataCaches.jl's own depot and are automatically removed
+if DataCaches.jl is uninstalled and `Pkg.gc()` is run. The explicit path form is portable
+and can be shared by copying or archiving the directory. See [Cache Store](#cache-store) for details.
+
+### Caching approaches
+
+With a cache in hand, all three patterns are available:
+
+```julia
+using DataCaches, PaleobiologDB
+
+# Optional: show caching operations in debug logs
+ENV["JULIA_DEBUG"] = "DataCaches"
+
+dc = DataCache(:myproject)
+
+# --- Pattern 1: @filecache — works with any function, no setup beyond the cache ---
+set_default_filecache!(dc)
+occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")  # fetches + stores
+occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")  # from cache
+
+# --- Pattern 2: explicit dict-style — full control over labels and timing ---
+dc["canidae_occs"] = pbdb_occurrences(base_name = "Canidae", show = "full")
+occs = dc["canidae_occs"]
+
+# --- Pattern 3: set_autocaching! — zero call-site changes, but requires
+#     instrumented or wrapped functions (see Pattern 3 section below) ---
+set_autocaching!(true; cache = dc)
+occs = pbdb_occurrences(base_name = "Canidae", show = "full")   # fetches + stores
+occs = pbdb_occurrences(base_name = "Canidae", show = "full")   # from cache, unchanged call
+set_autocaching!(false)
+```
+
+---
+
+## Cache Store
+
+`DataCache` constructors span a gradient from zero-configuration to full path control:
+
+```julia
+# Zero config — lifecycle-managed default store
+dc = DataCache()
+
+# Named store — lifecycle-managed, no path management required
+dc = DataCache(:project123)
+
+# Explicit path — portable, shareable across systems or users
+dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
+
+# Module-scoped — for package authors, namespaced by package UUID
+dc = DataCaches.scratch_datacache!(MyPackage_UUID, "results")
+```
+
+`DataCache()` and `DataCache(:name)` store data inside DataCaches.jl's Scratch.jl depot
+(`~/.julia/scratchspaces/<DataCaches-UUID>/caches/`) and are automatically removed when
+DataCaches.jl is uninstalled and `Pkg.gc()` is run — no manual cleanup needed.
+
+`DataCache("/path")` gives full control and portability: copy or archive the directory
+to share a cache across machines or users.
+
+`scratch_datacache!` is intended for package authors who need a cache scoped to their
+package's UUID with no risk of collision. See [Using DataCaches.jl inside a package](#using-datacachesjl-inside-a-package-module-scoped-cache).
 
 ---
 
 ## Usage Patterns
 
-### Pattern 1 — Automatic caching
+### Pattern 1 — Memoized function calls
 
-`set_autocaching!` installs a global hook that intercepts every call to an
-instrumented function and transparently caches the result. Existing call sites
-require no modification.
+`@filecache` and `@memcache` wrap a single function call expression and cache
+its result automatically, keyed on the runtime values of all arguments. If the
+same call appears again (even in a new session, for `@filecache`), the cached
+result is returned immediately without re-executing the function.
 
-**This pattern requires the library to integrate DataCaches.jl** by calling the
-`autocache` hook function internally (see [Integration API](#integration-api-for-library-authors)).
-For libraries that have not done this, Pattern 2 (`@filecache`) is the practical
-alternative — or you can write a thin wrapper yourself (shown below).
+These macros work with **any function from any library** — no integration or
+instrumentation required.
+
+#### `@filecache` — persist across Julia sessions
+
+```julia
+using DataCaches, PaleobiologDB
+
+# Optional: track caching operations in debug logs
+ENV["JULIA_DEBUG"] = "DataCaches"
+
+dc = DataCache(:project1)
+set_default_filecache!(dc)
+
+# First call: runs the query and stores the result
+occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")
+
+# Subsequent calls (same or new session): returns from disk immediately
+occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")
+```
+
+Pass an explicit cache as the first argument to target a specific store
+without changing the global default:
+
+```julia
+project_cache = DataCache("/data/research/pbdb_cache")
+occs = @filecache project_cache pbdb_occurrences(base_name = "Canidae")
+taxa = @filecache project_cache pbdb_taxa(name = "Dinosauria")
+```
+
+Since `@filecache` is generic, it works equally well with any third-party library:
+
+```julia
+using DataCaches, GBIF2
+
+dc = DataCache(:biodiversity)
+set_default_filecache!(dc)
+
+occs = @filecache GBIF2.occurrence_search(taxonKey = 212, limit = 300)
+# Next session: same call with `@filecache` returns from disk, no network request
+```
+
+#### `@memcache` — deduplicate within a session
+
+`@memcache` is the in-process equivalent: results live in memory for the
+duration of the Julia session and are discarded when the process exits.
+Useful for avoiding redundant calls within a notebook or long script.
+
+```julia
+occs = @memcache pbdb_occurrences(base_name = "Canidae", show = "full")
+taxa = @memcache pbdb_taxa(name = "Canis")
+
+memcache_clear!()   # discard all in-memory results
+```
+
+### Pattern 2 — Explicit label assignment
+
+The most transparent pattern. You control exactly what is stored and when it is
+retrieved, using dictionary-style indexing. Works with any data source.
+
+```julia
+using DataCaches, PaleobiologyDB
+
+# Optional: track caching operations in debug logs
+ENV["JULIA_DEBUG"] = "DataCaches"
+
+dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
+
+# Store
+dc["canidae_occs"]  = pbdb_occurrences(base_name = "Canidae", show = "full")
+dc["dinosaur_taxa"] = pbdb_taxa(name = "Dinosauria", vocab = "pbdb")
+
+# Retrieve by label
+occs = dc["canidae_occs"]
+taxa = dc["dinosaur_taxa"]
+
+# Retrieve by sequence index (as shown in showcache output)
+occs = dc[1]
+taxa = dc[2]
+
+# Conditionally fetch
+if !haskey(dc, "trilobites")
+    dc["trilobites"] = pbdb_occurrences(base_name = "Trilobita")
+end
+df = dc["trilobites"]
+```
+
+Manage the store:
+
+```julia
+# Overwrite an existing label
+dc["canidae_occs"] = pbdb_occurrences(base_name = "Canidae", show = "coords")
+
+# Summarize contents
+showcache(dc)
+# DataCache: /home/user/.datacaches/project1  (3 entries)
+#   [1]  2025-08-25T14:23:01  2a9d4a87  canidae_occs
+#                                        /home/user/.datacaches/project1/2a9d4a87-....csv
+#   ...
+
+# Rename a label
+relabel!(dc, "canidae_occs", "canidae")   # by label
+relabel!(dc, 2, "canidae")                # by sequence index
+
+# Retrieve by sequence index
+df = dc[1]
+
+# Remove entries
+delete!(dc, "trilobites")   # by label
+delete!(dc, 2)              # by sequence index
+clear!(dc)                  # remove all entries
+
+# Compact sequence numbers after many deletions
+reindexcache!(dc)
+```
+
+### Pattern 3 — Automatic caching
+
+`set_autocaching!` installs a global hook that intercepts calls to instrumented
+functions and transparently caches results. Existing call sites require no modification —
+the caching layer is completely invisible.
+
+**Prerequisite:** this pattern requires functions to be *instrumented*, meaning the
+library calls the `autocache` hook internally. See [Integration API for library authors](#integration-api-for-library-authors)
+for how to add this to a library, or [Thin wrapper approach](#with-any-third-party-library--thin-wrapper-approach)
+to instrument any existing function yourself in a few lines.
 
 #### With a natively integrated library (e.g. PaleobiologyDB.jl)
 
@@ -230,141 +385,18 @@ The wrapper body has three moving parts:
 | `"occurrence/search"` | Endpoint string (part of cache key) | Any stable string identifying the resource |
 | `kwargs` | Argument values (part of cache key) | Pass through from the wrapper |
 
-### Pattern 2 — Memoized function calls
-
-`@filecache` and `@memcache` wrap a single function call expression and cache
-its result automatically, keyed on the runtime values of all arguments. If the
-same call appears again (even in a new session, for `@filecache`), the cached
-result is returned immediately without re-executing the function.
-
-These macros are generic: they work with any function from any library, with no
-integration required on the library's part.
-
-#### `@filecache` — persist across Julia sessions
-
-```julia
-using DataCaches, PaleobiologyDB
-
-# Optional: track caching operations in debug logs
-ENV["JULIA_DEBUG"] = "DataCaches"
-
-dc = DataCache(:project1)
-set_default_filecache!(dc)
-
-# First call: runs the query and stores the result
-occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")
-
-# Subsequent calls (same or new session): returns from disk immediately
-occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")
-```
-
-Pass an explicit cache as the first argument to target a specific store
-without changing the global default:
-
-```julia
-project_cache = DataCache("/data/research/pbdb_cache")
-occs = @filecache project_cache pbdb_occurrences(base_name = "Canidae")
-taxa = @filecache project_cache pbdb_taxa(name = "Dinosauria")
-```
-
-Since `@filecache` is generic, it works equally well with any third-party library:
-
-```julia
-using DataCaches, GBIF2
-
-dc = DataCache(:biodiversity)
-set_default_filecache!(dc)
-
-occs = @filecache GBIF2.occurrence_search(taxonKey = 212, limit = 300)
-# Next session: same call with `@filecache` returns from disk, no network request
-```
-
-#### `@memcache` — deduplicate within a session
-
-`@memcache` is the in-process equivalent: results live in memory for the
-duration of the Julia session and are discarded when the process exits.
-Useful for avoiding redundant calls within a notebook or long script.
-
-```julia
-occs = @memcache pbdb_occurrences(base_name = "Canidae", show = "full")
-taxa = @memcache pbdb_taxa(name = "Canis")
-
-memcache_clear!()   # discard all in-memory results
-```
-
-### Pattern 3 — Explicit label assignment
-
-The most transparent pattern. You control exactly what is stored and when it is
-retrieved, using dictionary-style indexing. Works with any data source.
-
-```julia
-using DataCaches, PaleobiologyDB
-
-# Optional: track caching operations in debug logs
-ENV["JULIA_DEBUG"] = "DataCaches"
-
-dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
-
-# Store
-dc["canidae_occs"]  = pbdb_occurrences(base_name = "Canidae", show = "full")
-dc["dinosaur_taxa"] = pbdb_taxa(name = "Dinosauria", vocab = "pbdb")
-
-# Retrieve by label
-occs = dc["canidae_occs"]
-taxa = dc["dinosaur_taxa"]
-
-# Retrieve by sequence index (as shown in showcache output)
-occs = dc[1]
-taxa = dc[2]
-
-# Conditionally fetch
-if !haskey(dc, "trilobites")
-    dc["trilobites"] = pbdb_occurrences(base_name = "Trilobita")
-end
-df = dc["trilobites"]
-```
-
-Manage the store:
-
-```julia
-# Overwrite an existing label
-dc["canidae_occs"] = pbdb_occurrences(base_name = "Canidae", show = "coords")
-
-# Summarize contents
-showcache(dc)
-# DataCache: /home/user/.datacaches/project1  (3 entries)
-#   [1]  2025-08-25T14:23:01  2a9d4a87  canidae_occs
-#                                        /home/user/.datacaches/project1/2a9d4a87-....csv
-#   ...
-
-# Rename a label
-relabel!(dc, "canidae_occs", "canidae")   # by label
-relabel!(dc, 2, "canidae")                # by sequence index
-
-# Retrieve by sequence index
-df = dc[1]
-
-# Remove entries
-delete!(dc, "trilobites")   # by label
-delete!(dc, 2)              # by sequence index
-clear!(dc)                  # remove all entries
-
-# Compact sequence numbers after many deletions
-reindexcache!(dc)
-```
-
 ---
 
 ## Comparison of caching strategies
 
-| | `set_autocaching!` | `@filecache` | `@memcache` | `dc["label"] = ...` |
+| | `@filecache` | `@memcache` | `dc["label"] = ...` | `set_autocaching!` |
 |---|---|---|---|---|
-| Persists across sessions | Yes | Yes | No | Yes |
-| Works with any library | Only if integrated (or wrapped) | Yes | Yes | Yes |
-| Changes call sites | No | Yes | Yes | Yes |
-| Label is human-readable | Hash | Hash | Hash | Yes |
-| Force re-fetch | `force_refresh = true` | Overwrite by label | `memcache_clear!` | Overwrite by label |
-| Granularity | Per function | Per macro site | Per macro site | Any |
+| Persists across sessions | Yes | No | Yes | Yes |
+| Works with any library | Yes | Yes | Yes | Only if instrumented (or wrapped) |
+| Changes call sites | Yes | Yes | Yes | No |
+| Label is human-readable | Hash | Hash | Yes | Hash |
+| Force re-fetch | Overwrite by label | `memcache_clear!` | Overwrite by label | `force_refresh = true` |
+| Granularity | Per macro site | Per macro site | Any | Per function |
 
 ---
 
