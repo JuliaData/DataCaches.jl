@@ -713,4 +713,6 @@ using ZipFile
 
     end
 
+    include("test_migrate_legacy_defaultcache.jl")
+
 end

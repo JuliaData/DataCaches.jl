@@ -1032,5 +1032,6 @@ macro filecache(cache, expr)
 end
 
 include("Depot.jl")
+include("_migrate_legacy_defaultcache.jl")
 
 end # module
