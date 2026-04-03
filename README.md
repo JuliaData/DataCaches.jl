@@ -378,7 +378,30 @@ See [`test/README.md`](test/README.md) for more options.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATACACHES_DEFAULT_STORE` | `~/.cache/DataCaches` | Root directory used by `DataCache()` (no-argument constructor) |
+| `DATACACHES_DEFAULT_STORE` | See below | Override the default store used by `DataCache()` (no-argument constructor) |
+
+When `DATACACHES_DEFAULT_STORE` is not set, the no-argument `DataCache()` constructor stores its data in a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) scratch space under the active Julia depot (`~/.julia/scratchspaces/<DataCaches-UUID>/default/`). This integrates with Julia's package manager: the default cache is automatically removed if DataCaches.jl is ever uninstalled and `Pkg.gc()` is run.
+
+## Using DataCaches.jl inside a package
+
+When building a Julia package that uses DataCaches.jl for internal caching, use `scratch_datacache` to create a store whose lifetime is tied to your package:
+
+```julia
+module MyPackage
+using DataCaches
+
+const _MY_UUID = Base.UUID("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")  # copy from Project.toml
+const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
+
+function __init__()
+    _CACHE[] = DataCaches.scratch_datacache(_MY_UUID, "results")
+end
+
+get_cache() = _CACHE[]
+end
+```
+
+The scratch space lives at `~/.julia/scratchspaces/<MY_UUID>/results/` and is automatically removed when your package is uninstalled and `Pkg.gc()` is run. Use different `key` strings (second argument) to maintain independent cache stores within the same package.
 
 
 ## About

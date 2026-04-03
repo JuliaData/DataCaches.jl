@@ -279,4 +279,44 @@ using TOML
         end
     end
 
+    @testset "Scratch.jl integration" begin
+        @testset "default store is in Julia depot scratchspaces" begin
+            # When no env var is set, the default cache should live under the depot
+            depot_scratch = joinpath(first(Base.DEPOT_PATH), "scratchspaces")
+            c = DataCache()
+            @test startswith(c.store, depot_scratch)
+            @test isdir(c.store)
+        end
+
+        @testset "DATACACHES_DEFAULT_STORE env var overrides Scratch.jl" begin
+            mktempdir() do dir
+                withenv("DATACACHES_DEFAULT_STORE" => dir) do
+                    c = DataCache()
+                    @test c.store == abspath(dir)
+                end
+            end
+        end
+
+        @testset "scratch_datacache creates a functional DataCache" begin
+            test_uuid = Base.UUID("00000000-0000-0000-0000-000000000001")
+            c = scratch_datacache(test_uuid, "test_scratch_key")
+            @test c isa DataCache
+            @test isdir(c.store)
+            # The store should be inside the depot scratchspaces under the test UUID
+            depot_scratch = joinpath(first(Base.DEPOT_PATH), "scratchspaces")
+            @test startswith(c.store, depot_scratch)
+            # Verify it works as a normal DataCache
+            write!(c, [1, 2, 3]; label = "scratch_test_entry")
+            @test haskey(c, "scratch_test_entry")
+            @test c["scratch_test_entry"] == [1, 2, 3]
+        end
+
+        @testset "scratch_datacache default key" begin
+            test_uuid = Base.UUID("00000000-0000-0000-0000-000000000002")
+            c1 = scratch_datacache(test_uuid)
+            c2 = scratch_datacache(test_uuid, "datacache")
+            @test c1.store == c2.store
+        end
+    end
+
 end

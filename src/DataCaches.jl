@@ -5,6 +5,7 @@ using DataFrames
 using Dates
 import TOML
 using Serialization
+using Scratch
 using UUIDs
 
 export DataCache, CacheKey
@@ -13,6 +14,7 @@ export @filecache, @memcache
 export default_filecache, set_default_filecache!, memcache_clear!
 export set_autocaching!
 export autocache
+export scratch_datacache
 
 # =============================================================================
 # CacheKey
@@ -122,9 +124,13 @@ mutable struct DataCache
 end
 
 const _INDEX_FILENAME = "cache_index.toml"
+const _DATACACHES_UUID = Base.UUID("c1455f2b-6d6f-4f37-b463-919f923708a5")
 
 function _default_cache_dir()
-    return get(ENV, "DATACACHES_DEFAULT_STORE", joinpath(homedir(), ".cache", "DataCaches", "_DEFAULT"))
+    if haskey(ENV, "DATACACHES_DEFAULT_STORE")
+        return ENV["DATACACHES_DEFAULT_STORE"]
+    end
+    return Scratch.get_scratch!(_DATACACHES_UUID, "default")
 end
 
 function DataCache(store::AbstractString = _default_cache_dir())
@@ -133,6 +139,40 @@ function DataCache(store::AbstractString = _default_cache_dir())
     cache = DataCache(store, Dict{String,CacheKey}(), Dict{String,String}(), 1)
     _load_index!(cache)
     return cache
+end
+
+"""
+    scratch_datacache(pkg_uuid::Base.UUID, key::AbstractString="datacache") → DataCache
+
+Create a [`DataCache`](@ref) backed by a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl)
+scratch space namespaced to `pkg_uuid` and `key`.
+
+The scratch space lives under the active Julia depot
+(`~/.julia/scratchspaces/<pkg_uuid>/<key>/`) and is automatically removed when the
+owning package is uninstalled and `Pkg.gc()` is run.
+
+Use this in a package's `__init__` to create a lifecycle-managed cache:
+
+```julia
+module MyPackage
+using DataCaches
+
+const _MY_UUID = Base.UUID("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")  # match Project.toml
+const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
+
+function __init__()
+    _CACHE[] = DataCaches.scratch_datacache(_MY_UUID, "results")
+end
+
+get_cache() = _CACHE[]
+end
+```
+
+Multiple independent cache stores can be created by using different `key` values.
+"""
+function scratch_datacache(pkg_uuid::Base.UUID, key::AbstractString="datacache")
+    store = Scratch.get_scratch!(pkg_uuid, key)
+    return DataCache(store)
 end
 
 # --- Index I/O ---------------------------------------------------------------
