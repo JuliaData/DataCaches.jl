@@ -380,21 +380,20 @@ See [`test/README.md`](test/README.md) for more options.
 |---|---|---|
 | `DATACACHES_DEFAULT_STORE` | See below | Override the default store used by `DataCache()` (no-argument constructor) |
 
-When `DATACACHES_DEFAULT_STORE` is not set, the no-argument `DataCache()` constructor stores its data in a [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) scratch space under the active Julia depot (`~/.julia/scratchspaces/<DataCaches-UUID>/default/`). This integrates with Julia's package manager: the default cache is automatically removed if DataCaches.jl is ever uninstalled and `Pkg.gc()` is run.
+When `DATACACHES_DEFAULT_STORE` is not set, the no-argument `DataCache()` constructor stores its data inside the DataCaches depot at `~/.julia/scratchspaces/<DataCaches-UUID>/caches/defaultcache/`. The default cache is automatically removed if DataCaches.jl is ever uninstalled and `Pkg.gc()` is run.
 
-## Named scratch-backed caches
+## Named depot caches
 
-Pass a `Symbol` to `DataCache` to create a named cache within DataCaches.jl's own
-[Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) depot directory. No path
-management or UUIDs required, and the cache is automatically removed if DataCaches.jl
-is uninstalled:
+Pass a `Symbol` to `DataCache` to create a named local cache inside DataCaches.jl's
+own depot directory. No path management or UUIDs required, and the cache is
+automatically removed if DataCaches.jl is uninstalled:
 
 ```julia
 dc = DataCache(:myproject)
 ```
 
-The store lives at `~/.julia/scratchspaces/<DataCaches-UUID>/myproject/`. Multiple
-independent stores are created by using different symbols:
+The store lives at `~/.julia/scratchspaces/<DataCaches-UUID>/caches/local/myproject/`.
+Multiple independent stores are created by using different symbols:
 
 ```julia
 queries = DataCache(:pbdb_queries)
@@ -402,7 +401,7 @@ taxa    = DataCache(:taxonomy)
 ```
 
 This form is also convenient for library authors who want a lifecycle-managed cache
-without introducing their own scratch space:
+without introducing their own path management:
 
 ```julia
 const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
@@ -414,17 +413,30 @@ end
 ## Depot — managing named caches
 
 `DataCaches.Depot` is a submodule that provides a filesystem-style interface for
-browsing and managing the named caches that live in the DataCaches depot
+browsing and managing the caches that live in the DataCaches depot
 (`~/.julia/scratchspaces/<DataCaches-UUID>/`). It is public but not exported;
 access it as `DataCaches.Depot`.
+
+The depot uses a structured subdirectory layout:
+
+```
+~/.julia/scratchspaces/<DataCaches-UUID>/
+  caches/
+    defaultcache/          ← DataCache() default store
+    local/<name>/          ← DataCache(:name) stores
+    module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
+  test/caches/<name>/      ← test caches (cleaned up by cleanuptests())
+```
 
 ```julia
 using DataCaches
 
 # Inspect the depot
-DataCaches.Depot.pwd()          # → "/home/user/.julia/scratchspaces/c1455f2b-..."
-DataCaches.Depot.defaultstore() # → ".../c1455f2b-.../default"
-DataCaches.Depot.ls()           # → ["myproject", "taxonomy", ...]
+DataCaches.Depot.pwd()           # → "/home/user/.julia/scratchspaces/c1455f2b-..."
+DataCaches.Depot.defaultstore()  # → ".../c1455f2b-.../caches/defaultcache"
+DataCaches.Depot.ls()            # → ["myproject", "taxonomy", ...]  (local stores)
+DataCaches.Depot.ls(:module)     # → ["uuid1/key1", ...]             (module stores)
+DataCaches.Depot.ls(:root)       # → ["caches", "test"]              (raw depot root)
 
 # Create named caches as usual, then manage them through the Depot
 queries = DataCache(:myproject)
@@ -451,51 +463,10 @@ documentation of each function.
 
 ---
 
-## Depot — managing named caches
+## Using DataCaches.jl inside a package (module-scoped cache)
 
-`DataCaches.Depot` is a submodule that provides a filesystem-style interface for
-browsing and managing the named caches that live in the DataCaches depot
-(`~/.julia/scratchspaces/<DataCaches-UUID>/`). It is public but not exported;
-access it as `DataCaches.Depot`.
-
-```julia
-using DataCaches
-
-# Inspect the depot
-DataCaches.Depot.pwd()          # → "/home/user/.julia/scratchspaces/c1455f2b-..."
-DataCaches.Depot.defaultstore() # → ".../c1455f2b-.../default"
-DataCaches.Depot.ls()           # → ["myproject", "taxonomy", ...]
-
-# Create named caches as usual, then manage them through the Depot
-queries = DataCache(:myproject)
-taxa    = DataCache(:taxonomy)
-
-# Rename within depot
-DataCaches.Depot.mv(:myproject, :archived_project)
-
-# Copy within depot
-DataCaches.Depot.cp(:taxonomy, :taxonomy_backup)
-
-# Export to / import from the filesystem
-DataCaches.Depot.mv(:archived_project, "/data/exports/myproject")  # move out
-DataCaches.Depot.mv("/data/imports/shared_cache", :shared)         # move in
-DataCaches.Depot.cp(:taxonomy, "/tmp/taxonomy_snapshot")           # copy out
-
-# Remove
-DataCaches.Depot.rm(:taxonomy_backup)
-DataCaches.Depot.rm(:nonexistent; force=true)  # silently ignore if absent
-```
-
-See the [full API reference](https://juliadata.org/DataCaches.jl) for complete
-documentation of each function.
-
----
-
-## Using DataCaches.jl inside a package (own lifecycle)
-
-If you need the cache tied to *your own* package's lifecycle (removed when *your* package
-is uninstalled, independently of DataCaches.jl), use `scratch_datacache!` with your
-package's UUID:
+Use `scratch_datacache!` with your package's UUID to create a named cache scoped to
+your package's identity, stored under `<DataCaches-depot>/caches/module/<your-UUID>/<key>/`:
 
 ```julia
 module MyPackage
@@ -512,7 +483,10 @@ get_cache() = _CACHE[]
 end
 ```
 
-The scratch space lives at `~/.julia/scratchspaces/<MY_UUID>/results/` and is automatically removed when your package is uninstalled and `Pkg.gc()` is run. Use different `key` strings (second argument) to maintain independent cache stores within the same package.
+The cache is namespaced by UUID so it will not collide with stores from other packages.
+Use different `key` strings (second argument) to maintain independent cache stores
+within the same package. The cache is managed as part of the DataCaches depot and is
+removed when DataCaches.jl is uninstalled and `Pkg.gc()` is run.
 
 
 ## About
@@ -526,10 +500,6 @@ it particularly effective for a specific class of problems not well handled by e
 However, in addition, its broad range of caching mechanisms *and* syntax makes it 
 uniquely suited to solve one class of problems that none of the other offerings out 
 there could do in quite this way.
-
-This package addresses a general need for disk-based memoization and caching in contexts such as analytics, informatics, and software development, 
-where identical database queries or computationally expensive functions are executed repeatedly and expected to return stable results between manual cache refreshes. 
-It is broadly applicable, but its combination of flexible caching mechanisms and minimal syntactic overhead makes it particularly effective for a specific class of problems not well handled by existing tools.
 
 A primary use case arises in instructional settings (labs, workshops, and courses) where many users simultaneously issue repeated database queries, often overwhelming shared resources such as the database itself or available network bandwidth.
 By memoizing these calls and persisting results to disk, the package substantially reduces this load. 

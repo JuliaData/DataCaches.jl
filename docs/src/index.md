@@ -54,12 +54,22 @@ Modules = [DataCaches]
 ## Depot — store management
 
 `DataCaches.Depot` is a submodule (public, not exported) that provides a
-filesystem-style interface for managing the named caches living in the DataCaches
-depot directory (`~/.julia/scratchspaces/<DataCaches-UUID>/`).
+filesystem-style interface for managing the caches living in the DataCaches depot
+directory (`~/.julia/scratchspaces/<DataCaches-UUID>/`).
 
-Named caches are those created via `DataCache(:symbol)`. The `Depot` submodule
-lets you inspect, rename, copy, move, and remove them without needing to construct
-or track the underlying path yourself.
+The depot organises stores into subdirectories by kind:
+
+```
+~/.julia/scratchspaces/<DataCaches-UUID>/
+  caches/
+    defaultcache/          ← DataCache() default store
+    local/<name>/          ← DataCache(:name) stores
+    module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
+  test/caches/<name>/      ← test caches (see cleanuptests())
+```
+
+The `Depot` submodule lets you inspect, rename, copy, move, and remove stores
+without needing to construct or track the underlying path yourself.
 
 Access all functions as `DataCaches.Depot.<function>`.
 
@@ -68,21 +78,30 @@ Access all functions as `DataCaches.Depot.<function>`.
 ```julia
 using DataCaches
 
-# Depot root — the directory containing all named stores
+# Depot root — the top-level scratchspaces directory for DataCaches
 DataCaches.Depot.pwd()
 # → "/home/user/.julia/scratchspaces/c1455f2b-6d6f-4f37-b463-919f923708a5"
 
-# Path to a specific named store (directory need not exist yet)
+# Path to a specific local store (directory need not exist yet)
 DataCaches.Depot.pwd(:myproject)
-# → ".../c1455f2b-.../myproject"
+# → ".../c1455f2b-.../caches/local/myproject"
 
 # Path to the default store (respects DATACACHES_DEFAULT_STORE env var)
 DataCaches.Depot.defaultstore()
-# → ".../c1455f2b-.../default"
+# → ".../c1455f2b-.../caches/defaultcache"
 
-# List all named stores currently in the depot
-DataCaches.Depot.ls()
+# List local stores (DataCache(:name))
+DataCaches.Depot.ls()              # default storetype is :local
+DataCaches.Depot.ls(:local)
 # → ["myproject", "taxonomy", "archived_results"]
+
+# List module-scoped stores (scratch_datacache!(uuid, key))
+DataCaches.Depot.ls(:module)
+# → ["00000000-.../results", "aaaabbbb-.../datacache"]
+
+# Raw listing of the depot root
+DataCaches.Depot.ls(:root)
+# → ["caches", "test"]
 ```
 
 ### Renaming and copying within the depot
@@ -132,16 +151,21 @@ arbitrary `DataCache` objects.
 | Function | Description |
 |---|---|
 | `Depot.pwd()` | Depot root path |
-| `Depot.pwd(:name)` | Path to a named store |
-| `Depot.defaultstore()` | Path to the default store |
-| `Depot.ls()` | Names of all stores currently in the depot |
-| `Depot.rm(:name; force=false)` | Remove a named store |
-| `Depot.mv(:old, :new)` | Rename within depot |
-| `Depot.mv(:name, path)` | Move (export) named store to filesystem path |
+| `Depot.pwd(:name)` | Path to a local named store (`caches/local/<name>`) |
+| `Depot.defaultstore()` | Path to the default store (`caches/defaultcache`) |
+| `Depot.ls()` | Local store names — same as `ls(:local)` |
+| `Depot.ls(:local)` | Names of `DataCache(:name)` stores |
+| `Depot.ls(:module)` | `"<uuid>/<key>"` strings for `scratch_datacache!` stores |
+| `Depot.ls(:root)` | Raw subdirectory listing of the depot root |
+| `Depot.rm(:name; force=false)` | Remove a local named store |
+| `Depot.mv(:old, :new)` | Rename local store within depot |
+| `Depot.mv(:name, path)` | Move (export) local store to filesystem path |
 | `Depot.mv(path, :name)` | Move (import) filesystem directory into depot |
-| `Depot.cp(:old, :new)` | Copy within depot |
-| `Depot.cp(:name, path)` | Copy (export) named store to filesystem path |
+| `Depot.cp(:old, :new)` | Copy local store within depot |
+| `Depot.cp(:name, path)` | Copy (export) local store to filesystem path |
 | `Depot.cp(path, :name)` | Copy (import) filesystem directory into depot |
+| `Depot.test_datacache!(:name)` | Create a cache under `test/caches/<name>/` |
+| `Depot.cleanuptests()` | Remove the entire `test/caches/` tree |
 
 ### Depot API reference
 
