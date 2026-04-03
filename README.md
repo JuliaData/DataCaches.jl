@@ -411,6 +411,86 @@ function __init__()
 end
 ```
 
+## Depot — managing named caches
+
+`DataCaches.Depot` is a submodule that provides a filesystem-style interface for
+browsing and managing the named caches that live in the DataCaches depot
+(`~/.julia/scratchspaces/<DataCaches-UUID>/`). It is public but not exported;
+access it as `DataCaches.Depot`.
+
+```julia
+using DataCaches
+
+# Inspect the depot
+DataCaches.Depot.pwd()          # → "/home/user/.julia/scratchspaces/c1455f2b-..."
+DataCaches.Depot.defaultstore() # → ".../c1455f2b-.../default"
+DataCaches.Depot.ls()           # → ["myproject", "taxonomy", ...]
+
+# Create named caches as usual, then manage them through the Depot
+queries = DataCache(:myproject)
+taxa    = DataCache(:taxonomy)
+
+# Rename within depot
+DataCaches.Depot.mv(:myproject, :archived_project)
+
+# Copy within depot
+DataCaches.Depot.cp(:taxonomy, :taxonomy_backup)
+
+# Export to / import from the filesystem
+DataCaches.Depot.mv(:archived_project, "/data/exports/myproject")  # move out
+DataCaches.Depot.mv("/data/imports/shared_cache", :shared)         # move in
+DataCaches.Depot.cp(:taxonomy, "/tmp/taxonomy_snapshot")           # copy out
+
+# Remove
+DataCaches.Depot.rm(:taxonomy_backup)
+DataCaches.Depot.rm(:nonexistent; force=true)  # silently ignore if absent
+```
+
+See the [full API reference](https://juliadata.org/DataCaches.jl) for complete
+documentation of each function.
+
+---
+
+## Depot — managing named caches
+
+`DataCaches.Depot` is a submodule that provides a filesystem-style interface for
+browsing and managing the named caches that live in the DataCaches depot
+(`~/.julia/scratchspaces/<DataCaches-UUID>/`). It is public but not exported;
+access it as `DataCaches.Depot`.
+
+```julia
+using DataCaches
+
+# Inspect the depot
+DataCaches.Depot.pwd()          # → "/home/user/.julia/scratchspaces/c1455f2b-..."
+DataCaches.Depot.defaultstore() # → ".../c1455f2b-.../default"
+DataCaches.Depot.ls()           # → ["myproject", "taxonomy", ...]
+
+# Create named caches as usual, then manage them through the Depot
+queries = DataCache(:myproject)
+taxa    = DataCache(:taxonomy)
+
+# Rename within depot
+DataCaches.Depot.mv(:myproject, :archived_project)
+
+# Copy within depot
+DataCaches.Depot.cp(:taxonomy, :taxonomy_backup)
+
+# Export to / import from the filesystem
+DataCaches.Depot.mv(:archived_project, "/data/exports/myproject")  # move out
+DataCaches.Depot.mv("/data/imports/shared_cache", :shared)         # move in
+DataCaches.Depot.cp(:taxonomy, "/tmp/taxonomy_snapshot")           # copy out
+
+# Remove
+DataCaches.Depot.rm(:taxonomy_backup)
+DataCaches.Depot.rm(:nonexistent; force=true)  # silently ignore if absent
+```
+
+See the [full API reference](https://juliadata.org/DataCaches.jl) for complete
+documentation of each function.
+
+---
+
 ## Using DataCaches.jl inside a package (own lifecycle)
 
 If you need the cache tied to *your own* package's lifecycle (removed when *your* package
