@@ -1,5 +1,40 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **`package_cache` kwarg on `autocache`**: Library authors can now pass a
+  `package_cache::Union{DataCache,Nothing}` to `autocache` to specify a package-owned
+  default store. When autocaching is enabled but the user did **not** pass an explicit
+  `cache` to `set_autocaching!`, results go to `package_cache` instead of
+  `default_filecache()`. An explicit user-supplied cache always overrides
+  `package_cache`. This enables Pattern C integration (see Library Integration guide):
+  packages that want namespace-isolated default storage while fully respecting user
+  override.
+
+- **`_autocache_cache_explicit` internal flag**: `set_autocaching!` now tracks whether
+  the active cache was user-supplied or defaulted. This is the mechanism that gives
+  `package_cache` its correct priority without changing the return value or public
+  behaviour of `set_autocaching!`.
+
+- **Library Integration guide** (`docs/src/integration.md`): New documentation page
+  covering three standard integration patterns with complete working module examples:
+  - **Pattern A** — package-private data store (`scratch_datacache!`, no user-visible
+    autocaching)
+  - **Pattern B** — instrumented functions, user controls which cache is used
+  - **Pattern C** — instrumented functions with a package-owned default store
+    (`package_cache` kwarg), overridable by the user
+
+### Changed
+
+- `autocache` docstring updated to document `package_cache` and the three-level store
+  resolution priority (user-explicit → `package_cache` → `default_filecache()`).
+- `set_autocaching!` docstring clarified: when `cache` is omitted, store selection is
+  deferred to the `autocache` call site (a library-supplied `package_cache` takes
+  priority over `default_filecache()`).
+- README: new "Package-owned default cache" subsection in the Integration API section.
+
 ## [0.2.0]
 
 ### Added
