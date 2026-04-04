@@ -65,6 +65,10 @@ result = some_expensive_query(; taxon = "Dinosauria")   # from cache, unchanged 
 set_autocaching!(false)
 ```
 
+For guidance on integrating DataCaches.jl into a library — from private scratch caches
+to fully instrumented autocacheable functions with a package-owned default store — see
+the [Library Integration](integration.md) guide.
+
 ## API Reference
 
 ```@index

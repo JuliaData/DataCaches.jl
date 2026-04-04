@@ -385,6 +385,51 @@ The wrapper body has three moving parts:
 | `"occurrence/search"` | Endpoint string (part of cache key) | Any stable string identifying the resource |
 | `kwargs` | Argument values (part of cache key) | Pass through from the wrapper |
 
+#### Package-owned default cache
+
+By default, when the user calls `set_autocaching!(true)` without an explicit `cache`
+argument, results go to the shared [`default_filecache()`](https://juliadata.org/DataCaches.jl).
+If your package should instead write to its own namespaced
+[`scratch_datacache!`](https://juliadata.org/DataCaches.jl) store by default — while
+still letting the user override with `set_autocaching!(true; cache=x)` — pass a
+`package_cache` kwarg to `autocache`:
+
+```julia
+module MyPackage
+using DataCaches
+import DataCaches: autocache
+
+const _PKG_UUID = Base.UUID("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")  # from Project.toml
+const _pkg_cache_ref = Ref{Union{DataCache,Nothing}}(nothing)
+
+function __init__()
+    _pkg_cache_ref[] = DataCaches.scratch_datacache!(_PKG_UUID, "mypackage")
+end
+
+pkg_cache() = _pkg_cache_ref[]
+
+function my_query(; kwargs...)
+    return autocache(
+        () -> _do_query(; kwargs...),
+        my_query,
+        "resource/endpoint",
+        kwargs;
+        package_cache = _pkg_cache_ref[],   # ← package default, user-overridable
+    )
+end
+end
+```
+
+Store resolution priority:
+
+1. **User-explicit** — `set_autocaching!(true; cache=x)` → always `x`
+2. **`package_cache`** — used when no explicit user cache was set
+3. **`default_filecache()`** — final fallback
+
+See the [Library Integration guide](https://juliadata.org/DataCaches.jl/integration/)
+for complete working examples of all three patterns (private cache, user-controlled
+cache, and package-owned default cache).
+
 ---
 
 ## Comparison of caching strategies

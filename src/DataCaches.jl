@@ -729,10 +729,11 @@ const _memcache_store = Dict{UInt64,Any}()
 const _filecache_ref  = Ref{Union{DataCache,Nothing}}(nothing)
 
 # Autocache state
-const _autocache_enabled_ref = Ref{Bool}(false)
-const _autocache_cache_ref   = Ref{Union{DataCache,Nothing}}(nothing)
+const _autocache_enabled_ref      = Ref{Bool}(false)
+const _autocache_cache_ref        = Ref{Union{DataCache,Nothing}}(nothing)
+const _autocache_cache_explicit   = Ref{Bool}(false)   # true iff user passed cache= explicitly
 # nothing = all functions (global mode); Set = per-function allowlist
-const _autocache_funcs_ref   = Ref{Union{Nothing,Set{Any}}}(nothing)
+const _autocache_funcs_ref        = Ref{Union{Nothing,Set{Any}}}(nothing)
 
 """
     default_filecache() → DataCache
@@ -770,28 +771,37 @@ end
 """
     set_autocaching!(enabled::Bool; cache::Union{DataCache,Nothing} = nothing) → Union{DataCache,Nothing}
 
-Enable or disable automatic caching for **all** `pbdb_*` API functions.
+Enable or disable automatic caching for **all** instrumented API functions.
 
-When `enabled=true`, every call to a `pbdb_*` function automatically stores its result
-in a [`DataCache`](@ref) and returns the cached result on subsequent identical calls.
-Pass `cache` to use a specific store; otherwise [`default_filecache()`](@ref) is used.
+When `enabled=true`, every call to an instrumented function automatically stores its
+result in a [`DataCache`](@ref) and returns the cached result on subsequent identical
+calls.
 
-Returns the active [`DataCache`](@ref), or `nothing` when disabling.
+Pass `cache` to use a specific store; that cache is then used regardless of any
+`package_cache` the library supplies. When `cache` is omitted, store resolution is
+deferred to the `autocache` call site: any `package_cache` supplied by the library
+takes priority, with [`default_filecache()`](@ref) as the final fallback.
+
+Returns the active [`DataCache`](@ref) when enabling with an explicit `cache`, or
+`nothing` when disabling (or when enabling without an explicit `cache`, in which case
+store selection is deferred).
 
 # Examples
 ```julia
-DataCaches.set_autocaching!(true)
-DataCaches.set_autocaching!(false)
-DataCaches.set_autocaching!(true; cache=DataCache("/my/project/cache"))
+set_autocaching!(true)                                  # library default or default_filecache()
+set_autocaching!(false)
+set_autocaching!(true; cache=DataCache("/my/project/cache"))  # explicit store
 ```
 """
 function set_autocaching!(enabled::Bool; cache::Union{DataCache,Nothing} = nothing)
-    _autocache_enabled_ref[] = enabled
-    _autocache_funcs_ref[]   = nothing  # global mode
+    _autocache_enabled_ref[]    = enabled
+    _autocache_funcs_ref[]      = nothing  # global mode
     if enabled
-        _autocache_cache_ref[] = isnothing(cache) ? default_filecache() : cache
+        _autocache_cache_ref[]      = isnothing(cache) ? default_filecache() : cache
+        _autocache_cache_explicit[] = !isnothing(cache)
     else
-        _autocache_cache_ref[] = nothing
+        _autocache_cache_ref[]      = nothing
+        _autocache_cache_explicit[] = false
     end
     return _autocache_cache_ref[]
 end
@@ -825,7 +835,8 @@ function set_autocaching!(enabled::Bool, func; cache::Union{DataCache,Nothing} =
     if enabled
         _autocache_enabled_ref[] = true
         if isnothing(_autocache_cache_ref[]) || !isnothing(cache)
-            _autocache_cache_ref[] = isnothing(cache) ? default_filecache() : cache
+            _autocache_cache_ref[]      = isnothing(cache) ? default_filecache() : cache
+            _autocache_cache_explicit[] = !isnothing(cache)
         end
         existing = _autocache_funcs_ref[]
         if isnothing(existing)
@@ -842,9 +853,10 @@ function set_autocaching!(enabled::Bool, func; cache::Union{DataCache,Nothing} =
         end
         delete!(existing, func)
         if isempty(existing)
-            _autocache_enabled_ref[] = false
-            _autocache_funcs_ref[]   = nothing
-            _autocache_cache_ref[]   = nothing
+            _autocache_enabled_ref[]    = false
+            _autocache_funcs_ref[]      = nothing
+            _autocache_cache_ref[]      = nothing
+            _autocache_cache_explicit[] = false
         end
     end
     return _autocache_cache_ref[]
@@ -869,7 +881,12 @@ function _autocache_active(func)
     return func in funcs
 end
 
-function _get_autocache_store()
+function _get_autocache_store(package_cache::Union{DataCache,Nothing} = nothing)
+    # User explicitly passed cache= to set_autocaching! → always wins
+    _autocache_cache_explicit[] && return _autocache_cache_ref[]
+    # Library supplied a package-specific default → use it
+    isnothing(package_cache) || return package_cache
+    # Fall through to whatever set_autocaching! resolved (default_filecache())
     c = _autocache_cache_ref[]
     isnothing(c) && error("Autocache is enabled but no cache is configured.")
     return c
@@ -885,9 +902,11 @@ function _autocache_key(func, endpoint, kwargs)
 end
 
 """
-    autocache(fetch_fn, func, endpoint, kwargs; force_refresh::Bool = false)
+    autocache(fetch_fn, func, endpoint, kwargs;
+              package_cache::Union{DataCache,Nothing} = nothing,
+              force_refresh::Bool = false)
 
-Integration hook for API clients: transparently apply autocaching around a fetch closure.
+Integration hook for library authors: transparently apply autocaching around a fetch closure.
 
 If autocache is enabled for `func`, checks the cache for a prior result keyed on
 `(func, endpoint, kwargs)`. On a hit (and `force_refresh = false`) returns the cached
@@ -900,11 +919,25 @@ If autocache is not active for `func`, calls `fetch_fn()` directly.
 - `func`:           The public API function whose autocache opt-in is checked.
 - `endpoint`:       The API endpoint string (e.g. `"occs/list"`).
 - `kwargs`:         Keyword arguments passed by the caller.
+- `package_cache`:  Optional library-owned default [`DataCache`](@ref). Used when
+                    autocache is active but the user did **not** pass an explicit
+                    `cache` to [`set_autocaching!`](@ref). Allows a library to default
+                    to its own [`scratch_datacache!`](@ref)-backed store while still
+                    letting the user override via `set_autocaching!(true; cache=x)`.
+                    Pass `nothing` (default) to fall through to [`default_filecache()`](@ref).
 - `force_refresh`:  When `true`, bypasses the hit check and overwrites any existing entry.
+
+# Store resolution priority
+
+1. User-explicit: `set_autocaching!(true; cache=x)` → always uses `x`
+2. `package_cache` kwarg → used when no explicit user cache was set
+3. [`default_filecache()`](@ref) → final fallback
 """
-function autocache(fetch_fn, func, endpoint, kwargs; force_refresh::Bool = false)
+function autocache(fetch_fn, func, endpoint, kwargs;
+                   package_cache::Union{DataCache,Nothing} = nothing,
+                   force_refresh::Bool = false)
     _autocache_active(func) || return fetch_fn()
-    _store = _get_autocache_store()
+    _store = _get_autocache_store(package_cache)
     _ac_key, _ac_desc = _autocache_key(func, endpoint, kwargs)
     if haskey(_store, _ac_key) && !force_refresh
         @debug "$(_log_ts()) autocache: cache hit — $_ac_desc"

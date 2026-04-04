@@ -241,6 +241,35 @@ using ZipFile
         end
     end
 
+    @testset "autocache hook — package_cache kwarg" begin
+        mktempdir() do user_dir
+            mktempdir() do pkg_dir
+                user_cache = DataCache(user_dir)
+                pkg_cache  = DataCache(pkg_dir)
+                ep_key(ep) = DataCaches._autocache_key(identity, ep, (;))[1]
+
+                # No explicit user cache → package_cache is used
+                set_autocaching!(true)  # implicit: default_filecache(), NOT explicit
+                called = Ref(0)
+                fetch_fn = () -> (called[] += 1; DataFrame(x = [called[]]))
+                autocache(fetch_fn, identity, "ep_pkg", (;); package_cache = pkg_cache)
+                @test called[] == 1
+                @test  haskey(pkg_cache,  ep_key("ep_pkg"))
+                @test !haskey(user_cache, ep_key("ep_pkg"))
+                set_autocaching!(false)
+
+                # Explicit user cache → package_cache is overridden
+                set_autocaching!(true; cache = user_cache)
+                called[] = 0
+                autocache(fetch_fn, identity, "ep_exp", (;); package_cache = pkg_cache)
+                @test called[] == 1
+                @test  haskey(user_cache, ep_key("ep_exp"))
+                @test !haskey(pkg_cache,  ep_key("ep_exp"))
+                set_autocaching!(false)
+            end
+        end
+    end
+
     @testset "read and getindex by sequence index" begin
         mktempdir() do dir
             c = DataCache(dir)
