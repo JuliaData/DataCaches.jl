@@ -11,7 +11,7 @@ using ZipFile
 
 export DataCache, CacheKey
 export write!, relabel!, reindexcache!, keylabels, keypaths, clear!, showcache, label, path
-export @filecache, @memcache
+export @filecache, @filecache!, @memcache
 export default_filecache, set_default_filecache!, memcache_clear!
 export set_autocaching!
 export autocache
@@ -1060,6 +1060,58 @@ end
 
 macro filecache(cache, expr)
     return _filecache_impl(expr, esc(cache))
+end
+
+function _filecache_refresh_impl(expr, cache_expr)
+    expr isa Expr && expr.head == :call ||
+        error("@filecache!: expected a function call, got: $expr")
+    func_name = string(expr.args[1])
+    key_expr  = _cache_hash_expr(func_name, expr.args[2:end])
+    expr_str  = sprint(Base.show_unquoted, expr)
+    return quote
+        let _c = $cache_expr,
+            _lbl = string($key_expr)
+            @debug "$(DataCaches._log_ts()) @filecache!: updating cache — $($expr_str)"
+            _r = task_local_storage(:_pbdb_in_explicit_cache, true) do
+                $(esc(expr))
+            end
+            write!(_c, _r; label = _lbl, description = $expr_str)
+            _r
+        end
+    end
+end
+
+"""
+    @filecache! expr
+    @filecache! cache expr
+
+Evaluate `expr` (a function call), **unconditionally** store the result in a
+[`DataCache`](@ref), and return the result. Unlike [`@filecache`](@ref), this
+macro always re-executes the function and overwrites any existing cached entry,
+making it useful for forcing a cache refresh.
+
+The one-argument form uses [`default_filecache()`](@ref). Pass an explicit
+`DataCache` as the first argument to target a specific store.
+
+A `@debug` message is emitted (visible when `ENV["JULIA_DEBUG"] = "DataCaches"`)
+announcing the update.
+
+# Examples
+```julia
+# Force-refresh the default cache
+occs = @filecache! pbdb_occurrences(base_name="Canidae", show="full")
+
+# Force-refresh a specific cache
+my_cache = DataCache("/data/pbdb_cache")
+occs = @filecache! my_cache pbdb_occurrences(base_name="Canidae")
+```
+"""
+macro filecache!(expr)
+    return _filecache_refresh_impl(expr, :(default_filecache()))
+end
+
+macro filecache!(cache, expr)
+    return _filecache_refresh_impl(expr, esc(cache))
 end
 
 include("Depot.jl")

@@ -17,6 +17,7 @@ Three levels of caching are provided, from lightest-weight to most manual:
 | Level     | Mechanism              | Persistence      | Works with any function?  |
 |-----------|------------------------|------------------|---------------------------|
 | Memoized  | `@filecache`           | Across sessions  | Yes                       |
+| Refresh   | `@filecache!`          | Across sessions  | Yes                       |
 | Memoized  | `@memcache`            | In-session only  | Yes                       |
 | Explicit  | `dc["label"] = result` | Across sessions  | Yes                       |
 | Automatic | `set_autocaching!`     | Across sessions  | Only if instrumented      |
@@ -52,6 +53,7 @@ dc = DataCache(:myproject)
 set_default_filecache!(dc)
 result = @filecache some_expensive_query(; taxon = "Dinosauria")  # fetches + stores
 result = @filecache some_expensive_query(; taxon = "Dinosauria")  # from cache
+result = @filecache! some_expensive_query(; taxon = "Dinosauria") # force refresh
 
 # Explicit — dict-style, full control over labels
 dc["dinosaurs"] = some_expensive_query(; taxon = "Dinosauria")

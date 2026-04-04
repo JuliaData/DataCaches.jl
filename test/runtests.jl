@@ -190,6 +190,47 @@ using ZipFile
         end
     end
 
+    @testset "@filecache — cache miss then hit" begin
+        mktempdir() do dir
+            c = DataCache(dir)
+            called = Ref(0)
+            f = (x) -> (called[] += 1; x * 2)
+            r1 = @filecache c f(21)
+            @test r1 == 42
+            @test called[] == 1
+            r2 = @filecache c f(21)
+            @test r2 == 42
+            @test called[] == 1   # not called again
+        end
+    end
+
+    @testset "@filecache! always refreshes" begin
+        mktempdir() do dir
+            c = DataCache(dir)
+            called = Ref(0)
+            f = (x) -> (called[] += 1; called[])
+            r1 = @filecache! c f(0)
+            @test r1 == 1
+            @test called[] == 1
+            r2 = @filecache! c f(0)   # same args → same cache key → force overwrite
+            @test r2 == 2
+            @test called[] == 2       # always re-executes
+        end
+    end
+
+    @testset "@filecache! result is subsequently readable by @filecache" begin
+        mktempdir() do dir
+            c = DataCache(dir)
+            called = Ref(0)
+            g = (x) -> (called[] += 1; x + 10)
+            @filecache! c g(5)         # force-write value 15, called[]=1
+            @test called[] == 1
+            r = @filecache c g(5)      # should hit the cache written above
+            @test r == 15
+            @test called[] == 1        # not called again
+        end
+    end
+
     @testset "memcache_clear!" begin
         memcache_clear!()
         @test true

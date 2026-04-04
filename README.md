@@ -16,6 +16,7 @@ Three levels of caching are provided, from lightest-weight to most manual:
 | Level     | Mechanism              | Persistence     | Works with any function? |
 |-----------|------------------------|-----------------|--------------------------|
 | Memoized  | `@filecache`           | Across sessions | Yes                      |
+| Refresh   | `@filecache!`          | Across sessions | Yes                      |
 | Memoized  | `@memcache`            | In-session only | Yes                      |
 | Explicit  | `dc["label"] = result` | Across sessions | Yes                      |
 | Automatic | `set_autocaching!`     | Across sessions | Only if instrumented     |
@@ -41,6 +42,8 @@ DataCaches.jl provides three complementary interfaces aligned with its [purpose]
 foo = @filecache func1(x, y) 
 # Function not evaluated; cached result returned
 bar = @filecache func1(x, y) 
+# Unconditionally re-execute and overwrite the cache entry
+foo = @filecache! func1(x, y)
 ```
 
 - a straightforward Dict-style API for explicit, manual cache control
@@ -226,6 +229,33 @@ set_default_filecache!(dc)
 
 occs = @filecache GBIF2.occurrence_search(taxonKey = 212, limit = 300)
 # Next session: same call with `@filecache` returns from disk, no network request
+```
+
+#### `@filecache!` — force cache refresh
+
+`@filecache!` is the unconditional counterpart to `@filecache`. It always
+re-executes the function and overwrites any existing cached entry, then returns
+the fresh result. Use it when you know the upstream data has changed and want
+to refresh a specific call without clearing the entire cache.
+
+```julia
+# Force-refresh a stale entry
+occs = @filecache! pbdb_occurrences(base_name = "Canidae", show = "full")
+
+# Force-refresh into a specific cache
+project_cache = DataCache("/data/research/pbdb_cache")
+occs = @filecache! project_cache pbdb_occurrences(base_name = "Canidae")
+```
+
+After a `@filecache!` call the updated entry is immediately available to
+subsequent `@filecache` calls with the same arguments.
+
+Enable debug logging to see when updates occur:
+
+```julia
+ENV["JULIA_DEBUG"] = "DataCaches"
+occs = @filecache! pbdb_occurrences(base_name = "Canidae", show = "full")
+# @filecache!: updating cache — pbdb_occurrences(base_name = "Canidae", show = "full")
 ```
 
 #### `@memcache` — deduplicate within a session
@@ -434,14 +464,14 @@ cache, and package-owned default cache).
 
 ## Comparison of caching strategies
 
-| | `@filecache` | `@memcache` | `dc["label"] = ...` | `set_autocaching!` |
-|---|---|---|---|---|
-| Persists across sessions | Yes | No | Yes | Yes |
-| Works with any library | Yes | Yes | Yes | Only if instrumented (or wrapped) |
-| Changes call sites | Yes | Yes | Yes | No |
-| Label is human-readable | Hash | Hash | Yes | Hash |
-| Force re-fetch | Overwrite by label | `memcache_clear!` | Overwrite by label | `force_refresh = true` |
-| Granularity | Per macro site | Per macro site | Any | Per function |
+| | `@filecache` | `@filecache!` | `@memcache` | `dc["label"] = ...` | `set_autocaching!` |
+|---|---|---|---|---|---|
+| Persists across sessions | Yes | Yes | No | Yes | Yes |
+| Works with any library | Yes | Yes | Yes | Yes | Only if instrumented (or wrapped) |
+| Changes call sites | Yes | Yes | Yes | Yes | No |
+| Label is human-readable | Hash | Hash | Hash | Yes | Hash |
+| Always re-executes | No | **Yes** | No | Yes | With `force_refresh = true` |
+| Granularity | Per macro site | Per macro site | Per macro site | Any | Per function |
 
 ---
 
