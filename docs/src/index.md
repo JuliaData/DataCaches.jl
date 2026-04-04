@@ -94,7 +94,6 @@ The depot organises stores into subdirectories by kind:
     defaultcache/          ← DataCache() default store
     local/<name>/          ← DataCache(:name) stores
     module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
-  test/caches/<name>/      ← test caches (see cleanuptests())
 ```
 
 The `Depot` submodule lets you inspect, rename, copy, move, and remove stores
@@ -130,7 +129,7 @@ DataCaches.Depot.ls(:module)
 
 # Raw listing of the depot root
 DataCaches.Depot.ls(:root)
-# → [:caches, :test]
+# → [:caches]
 ```
 
 ### Renaming and copying within the depot
@@ -193,8 +192,6 @@ arbitrary `DataCache` objects.
 | `Depot.cp(:old, :new)` | Copy local store within depot |
 | `Depot.cp(:name, path)` | Copy (export) local store to filesystem path |
 | `Depot.cp(path, :name)` | Copy (import) filesystem directory into depot |
-| `Depot.test_datacache!(:name)` | Create a cache under `test/caches/<name>/` |
-| `Depot.cleanuptests()` | Remove the entire `test/caches/` tree |
 
 ### Depot API reference
 

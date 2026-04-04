@@ -13,7 +13,6 @@ const _datacache_ctor = Ref{Any}(nothing)
 _caches_dir()      = joinpath(_root(), "caches")
 _local_dir()       = joinpath(_caches_dir(), "local")
 _module_dir()      = joinpath(_caches_dir(), "module")
-_test_caches_dir() = joinpath(_root(), "test", "caches")
 
 """
     DataCaches.Depot.pwd() → String
@@ -201,29 +200,6 @@ function cp(src::AbstractString, dst::Symbol)
     mkpath(dirname(dst_path))
     @debug "Depot.cp" src=src_path dst=dst_path
     Base.cp(src_path, dst_path)
-end
-
-"""
-    DataCaches.Depot.cleanuptests()
-
-Remove the test cache directory (`<depot>/test/caches/`) and all its contents.
-Silently does nothing if the directory does not exist.
-"""
-function cleanuptests()
-    d = _test_caches_dir()
-    isdir(d) && Base.rm(d; recursive=true)
-end
-
-"""
-    DataCaches.Depot.test_datacache!(key::Symbol) → DataCache
-
-Create a [`DataCache`](@ref DataCaches.DataCache) under the depot's test area
-(`<depot>/test/caches/<key>/`). Use [`cleanuptests`](@ref) to remove all test caches.
-"""
-function test_datacache!(key::Symbol)
-    store = joinpath(_test_caches_dir(), string(key))
-    mkpath(store)
-    return _datacache_ctor[](store)
 end
 
 end # module Depot

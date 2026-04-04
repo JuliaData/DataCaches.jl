@@ -26,6 +26,13 @@
   - **Pattern C** — instrumented functions with a package-owned default store
     (`package_cache` kwarg), overridable by the user
 
+### Removed
+
+- `Depot.test_datacache!` and `Depot.cleanuptests`: removed as a public API. The Depot
+  test suite now redirects `Base.DEPOT_PATH` to a temporary directory for the duration
+  of each run, so all depot operations are fully isolated without needing a dedicated
+  test-area subdirectory.
+
 ### Changed
 
 - `autocache` docstring updated to document `package_cache` and the three-level store
@@ -52,8 +59,6 @@
   - `Depot.rm(name; force=false)` — remove a named store from the depot
   - `Depot.mv(src, dst)` — move, rename, import, or export caches (three dispatch forms: Symbol→Symbol, String→Symbol, Symbol→String)
   - `Depot.cp(src, dst)` — copy caches (same three dispatch forms as `mv`)
-  - `Depot.test_datacache!(key)` / `Depot.cleanuptests()` — create and clean up test caches
-
 - **Sequence indexing**: Cache entries now have stable integer sequence numbers. Entries can be read and deleted by sequence index in addition to label or UUID. `reindexcache!()` compacts sequence gaps left by deletions.
 
 - **Relative path storage in index**: The `cache_index.toml` now stores relative paths for portability across filesystems and directory moves. Absolute paths from v0.1.0 are still read correctly.

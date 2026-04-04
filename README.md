@@ -532,7 +532,6 @@ The depot uses a structured subdirectory layout:
     defaultcache/          ← DataCache() default store
     local/<name>/          ← DataCache(:name) stores
     module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
-  test/caches/<name>/      ← test caches (cleaned up by cleanuptests())
 ```
 
 ```julia
@@ -543,7 +542,7 @@ DataCaches.Depot.pwd()           # → "/home/user/.julia/scratchspaces/c1455f2b
 DataCaches.Depot.defaultstore()  # → ".../c1455f2b-.../caches/defaultcache"
 DataCaches.Depot.ls()            # → [:myproject, :taxonomy, ...]             (local stores)
 DataCaches.Depot.ls(:module)     # → [Symbol("uuid1/key1"), ...]               (module stores)
-DataCaches.Depot.ls(:root)       # → [:caches, :test]                          (raw depot root)
+DataCaches.Depot.ls(:root)       # → [:caches]                                  (raw depot root)
 
 # Create named caches as usual, then manage them through the Depot
 queries = DataCache(:myproject)

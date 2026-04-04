@@ -578,6 +578,12 @@ using ZipFile
 
     @testset "Depot" begin
 
+        mktempdir() do _fake_depot
+            _orig_depot_path = copy(Base.DEPOT_PATH)
+            empty!(Base.DEPOT_PATH)
+            push!(Base.DEPOT_PATH, _fake_depot)
+            try
+
         @testset "pwd() returns depot root path" begin
             root = DataCaches.Depot.pwd()
             @test root isa String
@@ -742,27 +748,11 @@ using ZipFile
             end
         end
 
-        @testset "test_datacache! creates cache in test area" begin
-            c = DataCaches.Depot.test_datacache!(:_test_area_store)
-            @test c isa DataCache
-            @test isdir(c.store)
-            @test occursin(joinpath("test", "caches"), c.store)
-            @test endswith(c.store, "_test_area_store")
-            # not visible in ls(:local)
-            @test !(:_test_area_store in DataCaches.Depot.ls(:local))
-            write!(c, [99]; label = "test_area_entry")
-            @test c["test_area_entry"] == [99]
+            finally
+                empty!(Base.DEPOT_PATH)
+                append!(Base.DEPOT_PATH, _orig_depot_path)
+            end
         end
-
-        @testset "cleanuptests() removes test cache directory" begin
-            DataCaches.Depot.test_datacache!(:_cleanup_target)
-            test_dir = joinpath(DataCaches.Depot.pwd(), "test", "caches")
-            @test isdir(test_dir)
-            DataCaches.Depot.cleanuptests()
-            @test !isdir(test_dir)
-        end
-
-        DataCaches.Depot.cleanuptests()
 
     end
 
