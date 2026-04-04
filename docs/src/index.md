@@ -122,15 +122,15 @@ DataCaches.Depot.defaultstore()
 # List local stores (DataCache(:name))
 DataCaches.Depot.ls()              # default storetype is :local
 DataCaches.Depot.ls(:local)
-# → ["myproject", "taxonomy", "archived_results"]
+# → [:myproject, :taxonomy, :archived_results]
 
 # List module-scoped stores (scratch_datacache!(uuid, key))
 DataCaches.Depot.ls(:module)
-# → ["00000000-.../results", "aaaabbbb-.../datacache"]
+# → [Symbol("00000000-.../results"), Symbol("aaaabbbb-.../datacache")]
 
 # Raw listing of the depot root
 DataCaches.Depot.ls(:root)
-# → ["caches", "test"]
+# → [:caches, :test]
 ```
 
 ### Renaming and copying within the depot

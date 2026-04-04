@@ -329,7 +329,7 @@ using ZipFile
 
         @testset "scratch_datacache! creates a functional DataCache" begin
             test_uuid = Base.UUID("00000000-0000-0000-0000-000000000001")
-            c = scratch_datacache!(test_uuid, "test_scratch_key")
+            c = scratch_datacache!(test_uuid, :test_scratch_key)
             @test c isa DataCache
             @test isdir(c.store)
             # The store should be inside the DataCaches depot under caches/module/
@@ -345,7 +345,7 @@ using ZipFile
         @testset "scratch_datacache! default key" begin
             test_uuid = Base.UUID("00000000-0000-0000-0000-000000000002")
             c1 = scratch_datacache!(test_uuid)
-            c2 = scratch_datacache!(test_uuid, "datacache")
+            c2 = scratch_datacache!(test_uuid, :datacache)
             @test c1.store == c2.store
         end
 
@@ -609,8 +609,8 @@ using ZipFile
             # Create a named store so the depot exists
             _ = DataCache(:_depot_ls_test_store)
             names = DataCaches.Depot.ls()
-            @test names isa Vector{String}
-            @test "_depot_ls_test_store" in names
+            @test names isa Vector{Symbol}
+            @test :_depot_ls_test_store in names
         end
 
         @testset "ls() returns empty vector when depot absent" begin
@@ -620,7 +620,7 @@ using ZipFile
                 empty!(Base.DEPOT_PATH)
                 push!(Base.DEPOT_PATH, fake_depot)
                 try
-                    @test DataCaches.Depot.ls() == String[]
+                    @test DataCaches.Depot.ls() == Symbol[]
                 finally
                     empty!(Base.DEPOT_PATH)
                     append!(Base.DEPOT_PATH, orig)
@@ -630,9 +630,9 @@ using ZipFile
 
         @testset "rm removes a named depot store" begin
             _ = DataCache(:_depot_rm_target)
-            @test "depot_rm_target" in DataCaches.Depot.ls() || true  # store exists after create
+            @test :_depot_rm_target in DataCaches.Depot.ls() || true  # store exists after create
             DataCaches.Depot.rm(:_depot_rm_target)
-            @test !("_depot_rm_target" in DataCaches.Depot.ls())
+            @test !(:_depot_rm_target in DataCaches.Depot.ls())
         end
 
         @testset "rm with force=true silently handles missing store" begin
@@ -650,8 +650,8 @@ using ZipFile
 
             DataCaches.Depot.mv(:_depot_mv_src, :_depot_mv_dst)
 
-            @test !("_depot_mv_src" in DataCaches.Depot.ls())
-            @test "_depot_mv_dst" in DataCaches.Depot.ls()
+            @test !(:_depot_mv_src in DataCaches.Depot.ls())
+            @test :_depot_mv_dst in DataCaches.Depot.ls()
             c2 = DataCache(:_depot_mv_dst)
             @test haskey(c2, "mv_payload")
 
@@ -667,7 +667,7 @@ using ZipFile
 
                 DataCaches.Depot.mv(:_depot_mv_export_src, dst)
 
-                @test !("_depot_mv_export_src" in DataCaches.Depot.ls())
+                @test !(:_depot_mv_export_src in DataCaches.Depot.ls())
                 @test isdir(dst)
                 c2 = DataCache(dst)
                 @test haskey(c2, "export_payload")
@@ -683,7 +683,7 @@ using ZipFile
                 DataCaches.Depot.mv(ext_dir, :_depot_mv_import_dst)
 
                 @test !isdir(ext_dir)
-                @test "_depot_mv_import_dst" in DataCaches.Depot.ls()
+                @test :_depot_mv_import_dst in DataCaches.Depot.ls()
                 c2 = DataCache(:_depot_mv_import_dst)
                 @test haskey(c2, "import_payload")
 
@@ -698,8 +698,8 @@ using ZipFile
 
             DataCaches.Depot.cp(:_depot_cp_src, :_depot_cp_dst)
 
-            @test "_depot_cp_src" in DataCaches.Depot.ls()
-            @test "_depot_cp_dst" in DataCaches.Depot.ls()
+            @test :_depot_cp_src in DataCaches.Depot.ls()
+            @test :_depot_cp_dst in DataCaches.Depot.ls()
             c2 = DataCache(:_depot_cp_dst)
             @test haskey(c2, "cp_payload")
 
@@ -716,7 +716,7 @@ using ZipFile
 
                 DataCaches.Depot.cp(:_depot_cp_export_src, dst)
 
-                @test "_depot_cp_export_src" in DataCaches.Depot.ls()
+                @test :_depot_cp_export_src in DataCaches.Depot.ls()
                 @test isdir(dst)
                 c2 = DataCache(dst)
                 @test haskey(c2, "cp_export_payload")
@@ -734,7 +734,7 @@ using ZipFile
                 DataCaches.Depot.cp(ext_dir, :_depot_cp_import_dst)
 
                 @test isdir(ext_dir)  # source preserved
-                @test "_depot_cp_import_dst" in DataCaches.Depot.ls()
+                @test :_depot_cp_import_dst in DataCaches.Depot.ls()
                 c2 = DataCache(:_depot_cp_import_dst)
                 @test haskey(c2, "cp_import_payload")
 
@@ -749,7 +749,7 @@ using ZipFile
             @test occursin(joinpath("test", "caches"), c.store)
             @test endswith(c.store, "_test_area_store")
             # not visible in ls(:local)
-            @test !("_test_area_store" in DataCaches.Depot.ls(:local))
+            @test !(:_test_area_store in DataCaches.Depot.ls(:local))
             write!(c, [99]; label = "test_area_entry")
             @test c["test_area_entry"] == [99]
         end

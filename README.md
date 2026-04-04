@@ -109,7 +109,7 @@ dc = DataCache(:project123)
 dc = DataCache("/path/to/cache")
 
 # Module-scoped — for package authors; namespaced by UUID
-dc = DataCaches.scratch_datacache!(MyPackage_UUID, "results")
+dc = DataCaches.scratch_datacache!(MyPackage_UUID, :results)
 ```
 
 The first two forms live inside DataCaches.jl's own depot and are automatically removed
@@ -162,7 +162,7 @@ dc = DataCache(:project123)
 dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
 
 # Module-scoped — for package authors, namespaced by package UUID
-dc = DataCaches.scratch_datacache!(MyPackage_UUID, "results")
+dc = DataCaches.scratch_datacache!(MyPackage_UUID, :results)
 ```
 
 `DataCache()` and `DataCache(:name)` store data inside DataCaches.jl's Scratch.jl depot
@@ -403,7 +403,7 @@ const _PKG_UUID = Base.UUID("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")  # from Proj
 const _pkg_cache_ref = Ref{Union{DataCache,Nothing}}(nothing)
 
 function __init__()
-    _pkg_cache_ref[] = DataCaches.scratch_datacache!(_PKG_UUID, "mypackage")
+    _pkg_cache_ref[] = DataCaches.scratch_datacache!(_PKG_UUID, :mypackage)
 end
 
 pkg_cache() = _pkg_cache_ref[]
@@ -541,9 +541,9 @@ using DataCaches
 # Inspect the depot
 DataCaches.Depot.pwd()           # → "/home/user/.julia/scratchspaces/c1455f2b-..."
 DataCaches.Depot.defaultstore()  # → ".../c1455f2b-.../caches/defaultcache"
-DataCaches.Depot.ls()            # → ["myproject", "taxonomy", ...]  (local stores)
-DataCaches.Depot.ls(:module)     # → ["uuid1/key1", ...]             (module stores)
-DataCaches.Depot.ls(:root)       # → ["caches", "test"]              (raw depot root)
+DataCaches.Depot.ls()            # → [:myproject, :taxonomy, ...]             (local stores)
+DataCaches.Depot.ls(:module)     # → [Symbol("uuid1/key1"), ...]               (module stores)
+DataCaches.Depot.ls(:root)       # → [:caches, :test]                          (raw depot root)
 
 # Create named caches as usual, then manage them through the Depot
 queries = DataCache(:myproject)
@@ -583,7 +583,7 @@ const _MY_UUID = Base.UUID("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")  # copy from 
 const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
 
 function __init__()
-    _CACHE[] = DataCaches.scratch_datacache!(_MY_UUID, "results")
+    _CACHE[] = DataCaches.scratch_datacache!(_MY_UUID, :results)
 end
 
 get_cache() = _CACHE[]

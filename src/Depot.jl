@@ -52,16 +52,16 @@ function defaultstore()
 end
 
 """
-    DataCaches.Depot.ls(storetype::Symbol = :local) → Vector{String}
+    DataCaches.Depot.ls(storetype::Symbol = :local) → Vector{Symbol}
 
 List the names of [`DataCache`](@ref DataCaches.DataCache) stores in the depot.
 
 `storetype` controls which category is listed:
 
 - `:local` (default) — named stores created via `DataCache(:name)`, living under
-  `<depot>/caches/local/`. Returns store names (e.g. `["myproject", "mydata"]`).
+  `<depot>/caches/local/`. Returns store names (e.g. `[:myproject, :mydata]`).
 - `:module` — stores created via `scratch_datacache!(uuid, key)`, living under
-  `<depot>/caches/module/<uuid>/<key>/`. Returns `"<uuid>/<key>"` strings.
+  `<depot>/caches/module/<uuid>/<key>/`. Returns `Symbol("<uuid>/<key>")` entries.
 - `:root` — raw subdirectory listing of the depot root (legacy flat view).
 
 Returns an empty vector if the relevant directory does not yet exist.
@@ -69,24 +69,29 @@ Returns an empty vector if the relevant directory does not yet exist.
 function ls(storetype::Symbol = :local)
     if storetype === :local
         dir = _local_dir()
-        isdir(dir) || return String[]
-        return [n for n in readdir(dir) if isdir(joinpath(dir, n))]
+        isdir(dir) || return Symbol[]
+        result = [Symbol(n) for n in readdir(dir) if isdir(joinpath(dir, n))]
+        @debug "Depot.ls" storetype=:local paths=joinpath.(_local_dir(), string.(result))
+        return result
     elseif storetype === :module
         dir = _module_dir()
-        isdir(dir) || return String[]
-        result = String[]
+        isdir(dir) || return Symbol[]
+        result = Symbol[]
         for uuid_dir in readdir(dir)
             full_uuid = joinpath(dir, uuid_dir)
             isdir(full_uuid) || continue
             for key in readdir(full_uuid)
-                isdir(joinpath(full_uuid, key)) && push!(result, "$uuid_dir/$key")
+                isdir(joinpath(full_uuid, key)) && push!(result, Symbol("$uuid_dir/$key"))
             end
         end
+        @debug "Depot.ls" storetype=:module count=length(result)
         return result
     elseif storetype === :root
         root = _root()
-        isdir(root) || return String[]
-        return [n for n in readdir(root) if isdir(joinpath(root, n))]
+        isdir(root) || return Symbol[]
+        result = [Symbol(n) for n in readdir(root) if isdir(joinpath(root, n))]
+        @debug "Depot.ls" storetype=:root paths=joinpath.(root, string.(result))
+        return result
     else
         error("Unknown storetype $(repr(storetype)); expected :local, :module, or :root")
     end
@@ -106,6 +111,7 @@ function rm(name::Symbol; force::Bool = false)
         force && return
         error("No depot cache named $(repr(name))")
     end
+    @debug "Depot.rm" path=path
     Base.rm(path; recursive=true)
 end
 
@@ -129,6 +135,7 @@ function mv(src::Symbol, dst::Symbol)
     dst_path = pwd(dst)
     isdir(src_path) || error("No depot cache named $(repr(src))")
     isdir(dst_path) && error("Depot cache $(repr(dst)) already exists")
+    @debug "Depot.mv" src=src_path dst=dst_path
     Base.mv(src_path, dst_path)
 end
 
@@ -138,6 +145,7 @@ function mv(src::Symbol, dst::AbstractString)
     dst_path = abspath(dst)
     isdir(dst_path) && error("Destination already exists: $(repr(dst_path))")
     mkpath(dirname(dst_path))
+    @debug "Depot.mv" src=src_path dst=dst_path
     Base.mv(src_path, dst_path)
 end
 
@@ -147,6 +155,7 @@ function mv(src::AbstractString, dst::Symbol)
     dst_path = pwd(dst)
     isdir(dst_path) && error("Depot cache $(repr(dst)) already exists")
     mkpath(dirname(dst_path))
+    @debug "Depot.mv" src=src_path dst=dst_path
     Base.mv(src_path, dst_path)
 end
 
@@ -170,6 +179,7 @@ function cp(src::Symbol, dst::Symbol)
     dst_path = pwd(dst)
     isdir(src_path) || error("No depot cache named $(repr(src))")
     isdir(dst_path) && error("Depot cache $(repr(dst)) already exists")
+    @debug "Depot.cp" src=src_path dst=dst_path
     Base.cp(src_path, dst_path)
 end
 
@@ -179,6 +189,7 @@ function cp(src::Symbol, dst::AbstractString)
     dst_path = abspath(dst)
     isdir(dst_path) && error("Destination already exists: $(repr(dst_path))")
     mkpath(dirname(dst_path))
+    @debug "Depot.cp" src=src_path dst=dst_path
     Base.cp(src_path, dst_path)
 end
 
@@ -188,6 +199,7 @@ function cp(src::AbstractString, dst::Symbol)
     dst_path = pwd(dst)
     isdir(dst_path) && error("Depot cache $(repr(dst)) already exists")
     mkpath(dirname(dst_path))
+    @debug "Depot.cp" src=src_path dst=dst_path
     Base.cp(src_path, dst_path)
 end
 

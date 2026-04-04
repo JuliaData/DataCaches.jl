@@ -39,7 +39,7 @@ const _cache_ref = Ref{Union{DataCache,Nothing}}(nothing)
 
 function __init__()
     # One scratch_datacache! per logical dataset; use distinct keys for multiple stores.
-    _cache_ref[] = DataCaches.scratch_datacache!(_PKG_UUID, "taxonomy")
+    _cache_ref[] = DataCaches.scratch_datacache!(_PKG_UUID, :taxonomy)
 end
 
 # Expose the cache for power users who want to inspect or manage it
@@ -222,7 +222,7 @@ const _PKG_UUID = Base.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 const _pkg_cache_ref = Ref{Union{DataCache,Nothing}}(nothing)
 
 function __init__()
-    _pkg_cache_ref[] = DataCaches.scratch_datacache!(_PKG_UUID, "biosearch")
+    _pkg_cache_ref[] = DataCaches.scratch_datacache!(_PKG_UUID, :biosearch)
 end
 
 """

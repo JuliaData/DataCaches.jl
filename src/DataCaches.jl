@@ -172,7 +172,7 @@ function DataCache(key::Symbol)
 end
 
 """
-    scratch_datacache!(pkg_uuid::Base.UUID, key::AbstractString = "datacache") → DataCache
+    scratch_datacache!(pkg_uuid::Base.UUID, key::Symbol = :datacache) → DataCache
 
 Create a [`DataCache`](@ref) stored under DataCaches' own depot, namespaced by
 `pkg_uuid` and `key`, at `<depot>/caches/module/<pkg_uuid>/<key>/`.
@@ -191,15 +191,15 @@ const _MY_UUID = Base.UUID("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")  # match Proj
 const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
 
 function __init__()
-    _CACHE[] = DataCaches.scratch_datacache!(_MY_UUID, "results")
+    _CACHE[] = DataCaches.scratch_datacache!(_MY_UUID, :results)
 end
 
 get_cache() = _CACHE[]
 end
 ```
 """
-function scratch_datacache!(pkg_uuid::Base.UUID, key::AbstractString = "datacache")
-    store = joinpath(Depot._module_dir(), string(pkg_uuid), key)
+function scratch_datacache!(pkg_uuid::Base.UUID, key::Symbol = :datacache)
+    store = joinpath(Depot._module_dir(), string(pkg_uuid), string(key))
     mkpath(store)
     return DataCache(store)
 end
