@@ -6,6 +6,13 @@ using ZipFile
 
 @testset "DataCaches" begin
 
+    # Redirect Base.DEPOT_PATH to a temporary directory for the entire test suite so
+    # no test inadvertently creates files in the real production scratchspace.
+    _test_fake_depot = mktempdir()
+    _test_orig_depot_path = copy(Base.DEPOT_PATH)
+    empty!(Base.DEPOT_PATH)
+    push!(Base.DEPOT_PATH, _test_fake_depot)
+
     @testset "DataCache construction" begin
         mktempdir() do dir
             c = DataCache(dir)
@@ -351,6 +358,12 @@ using ZipFile
     end
 
     @testset "Scratch.jl integration" begin
+        mktempdir() do _fake_depot
+            _orig_depot_path = copy(Base.DEPOT_PATH)
+            empty!(Base.DEPOT_PATH)
+            push!(Base.DEPOT_PATH, _fake_depot)
+            try
+
         @testset "default store is in Julia depot scratchspaces" begin
             # When no env var is set, the default cache should live under the depot
             depot_scratch = joinpath(first(Base.DEPOT_PATH), "scratchspaces")
@@ -419,6 +432,12 @@ using ZipFile
             @test haskey(c, "named_entry")
             c2 = DataCache(:functional_test_store)
             @test c2["named_entry"] == [10, 20, 30]
+        end
+
+            finally
+                empty!(Base.DEPOT_PATH)
+                append!(Base.DEPOT_PATH, _orig_depot_path)
+            end
         end
     end
 
@@ -798,5 +817,10 @@ using ZipFile
     end
 
     include("test_migrate_legacy_defaultcache.jl")
+
+    # Restore the original depot path after all tests.
+    empty!(Base.DEPOT_PATH)
+    append!(Base.DEPOT_PATH, _test_orig_depot_path)
+    rm(_test_fake_depot; recursive = true, force = true)
 
 end
