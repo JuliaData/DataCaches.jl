@@ -87,54 +87,23 @@ function _ls_print(io::IO, entries::Vector{CacheKey}, sizes::Dict{String,Int},
 end
 
 # =============================================================================
-# ls — list assets
+# ls / ls! — list assets
 # =============================================================================
 
-"""
-    DataCaches.CacheAssets.ls([cache::DataCache]; kwargs...) → nothing
-
-List assets in `cache`, printing a formatted summary to `io` (default `stdout`).
-If `cache` is omitted, the active default cache is used (see `default_filecache()`).
-
-# Keyword arguments
-
-**Display:**
-- `detail::Symbol = :normal` — richness of the output:
-  - `:minimal` — sequence index and label only
-  - `:normal` (default) — index, write timestamp, UUID prefix, label, and file path
-  - `:full` — all of `:normal` plus last-access time, file size, and data format
-
-**Filtering:**
-- `pattern` — `Regex` or `String` (converted to `Regex`); matched against label,
-  description, then UUID. Pass `nothing` (default) to disable.
-- `before::DateTime` — include only entries written before this time
-- `after::DateTime` — include only entries written after this time
-- `accessed_before::DateTime` — include only entries last accessed before this time
-- `accessed_after::DateTime` — include only entries last accessed after this time
-- `labeled::Union{Nothing,Bool} = nothing` — `true` for labeled entries only,
-  `false` for unlabeled only, `nothing` for all
-- `missing_file::Bool = false` — when `true`, include entries whose backing file is absent
-
-**Sorting:**
-- `sortby::Symbol = :seq` — sort criterion: `:seq`, `:label`, `:date`, `:date_desc`,
-  `:dateaccessed`, `:dateaccessed_desc`, `:size`, `:size_desc`
-- `rev::Bool = false` — reverse the sort order
-
-**Output:**
-- `io::IO = stdout`
-"""
-function ls(cache::DataCache;
-            detail::Symbol                               = :normal,
-            pattern::Union{Nothing,Regex,AbstractString} = nothing,
-            before::Union{Nothing,Dates.DateTime}        = nothing,
-            after::Union{Nothing,Dates.DateTime}         = nothing,
-            accessed_before::Union{Nothing,Dates.DateTime} = nothing,
-            accessed_after::Union{Nothing,Dates.DateTime}  = nothing,
-            labeled::Union{Nothing,Bool}                 = nothing,
-            missing_file::Bool                           = false,
-            sortby::Symbol                               = :seq,
-            rev::Bool                                    = false,
-            io::IO                                       = stdout)
+# Shared filtering/sorting backend.  Returns (entries, sizes) where `sizes` is
+# populated only when `need_sizes` is true (required for :size/:size_desc sort
+# and for the :full display detail level).
+function _ls_select(cache::DataCache;
+                    pattern::Union{Nothing,Regex,AbstractString} = nothing,
+                    before::Union{Nothing,Dates.DateTime}        = nothing,
+                    after::Union{Nothing,Dates.DateTime}         = nothing,
+                    accessed_before::Union{Nothing,Dates.DateTime} = nothing,
+                    accessed_after::Union{Nothing,Dates.DateTime}  = nothing,
+                    labeled::Union{Nothing,Bool}                 = nothing,
+                    missing_file::Bool                           = false,
+                    sortby::Symbol                               = :seq,
+                    rev::Bool                                    = false,
+                    need_sizes::Bool                             = false)
     entries = collect(values(cache._index))
 
     # --- Filter ---
@@ -168,7 +137,6 @@ function ls(cache::DataCache;
     end
 
     # --- Sizes (fetch only when needed) ---
-    need_sizes = sortby in (:size, :size_desc) || detail == :full
     sizes = if need_sizes
         Dict{String,Int}(k.id => (isfile(k.path) ? stat(k.path).size : -1) for k in entries)
     else
@@ -202,11 +170,92 @@ function ls(cache::DataCache;
     end
     sort!(entries; by = sort_fn, rev = do_rev)
 
+    return entries, sizes
+end
+
+"""
+    DataCaches.CacheAssets.ls([cache::DataCache]; kwargs...) → Vector{CacheKey}
+
+Return a filtered and sorted vector of cache entries from `cache`.
+If `cache` is omitted, the active default cache is used (see `default_filecache()`).
+
+# Keyword arguments
+
+**Filtering:**
+- `pattern` — `Regex` or `String` (converted to `Regex`); matched against label,
+  description, then UUID. Pass `nothing` (default) to disable.
+- `before::DateTime` — include only entries written before this time
+- `after::DateTime` — include only entries written after this time
+- `accessed_before::DateTime` — include only entries last accessed before this time
+- `accessed_after::DateTime` — include only entries last accessed after this time
+- `labeled::Union{Nothing,Bool} = nothing` — `true` for labeled entries only,
+  `false` for unlabeled only, `nothing` for all
+- `missing_file::Bool = false` — when `true`, include entries whose backing file is absent
+
+**Sorting:**
+- `sortby::Symbol = :seq` — sort criterion: `:seq`, `:label`, `:date`, `:date_desc`,
+  `:dateaccessed`, `:dateaccessed_desc`, `:size`, `:size_desc`
+- `rev::Bool = false` — reverse the sort order
+
+See also [`ls!`](@ref) for a display-oriented variant that prints to an `IO` stream.
+"""
+function ls(cache::DataCache;
+            pattern::Union{Nothing,Regex,AbstractString} = nothing,
+            before::Union{Nothing,Dates.DateTime}        = nothing,
+            after::Union{Nothing,Dates.DateTime}         = nothing,
+            accessed_before::Union{Nothing,Dates.DateTime} = nothing,
+            accessed_after::Union{Nothing,Dates.DateTime}  = nothing,
+            labeled::Union{Nothing,Bool}                 = nothing,
+            missing_file::Bool                           = false,
+            sortby::Symbol                               = :seq,
+            rev::Bool                                    = false)
+    entries, _ = _ls_select(cache;
+                            pattern, before, after, accessed_before, accessed_after,
+                            labeled, missing_file, sortby, rev,
+                            need_sizes = false)
+    return entries
+end
+
+ls(; kwargs...) = ls(default_filecache(); kwargs...)
+
+"""
+    DataCaches.CacheAssets.ls!([cache::DataCache]; kwargs...) → nothing
+
+Print a formatted listing of assets in `cache` to `io` (default `stdout`).
+If `cache` is omitted, the active default cache is used (see `default_filecache()`).
+
+Accepts all the same filtering and sorting keyword arguments as [`ls`](@ref), plus:
+
+# Additional keyword arguments
+
+**Display:**
+- `detail::Symbol = :normal` — richness of the output:
+  - `:minimal` — sequence index and label only
+  - `:normal` (default) — index, write timestamp, UUID prefix, label, and file path
+  - `:full` — all of `:normal` plus last-access time, file size, and data format
+- `io::IO = stdout`
+"""
+function ls!(cache::DataCache;
+             detail::Symbol                               = :normal,
+             pattern::Union{Nothing,Regex,AbstractString} = nothing,
+             before::Union{Nothing,Dates.DateTime}        = nothing,
+             after::Union{Nothing,Dates.DateTime}         = nothing,
+             accessed_before::Union{Nothing,Dates.DateTime} = nothing,
+             accessed_after::Union{Nothing,Dates.DateTime}  = nothing,
+             labeled::Union{Nothing,Bool}                 = nothing,
+             missing_file::Bool                           = false,
+             sortby::Symbol                               = :seq,
+             rev::Bool                                    = false,
+             io::IO                                       = stdout)
+    entries, sizes = _ls_select(cache;
+                                pattern, before, after, accessed_before, accessed_after,
+                                labeled, missing_file, sortby, rev,
+                                need_sizes = sortby ∈ (:size, :size_desc) || detail == :full)
     _ls_print(io, entries, sizes, detail)
     return nothing
 end
 
-ls(; kwargs...) = ls(default_filecache(); kwargs...)
+ls!(; kwargs...) = ls!(default_filecache(); kwargs...)
 
 # =============================================================================
 # rm — remove assets

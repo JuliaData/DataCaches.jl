@@ -274,14 +274,21 @@ using DataCaches.CacheAssets
 
 dc = DataCache(:myproject)
 
-# --- List ---
-CacheAssets.ls(dc)                                 # normal detail: seq, timestamp, label, path
-CacheAssets.ls(dc; detail = :minimal)              # seq + label only
-CacheAssets.ls(dc; detail = :full)                 # + access time, file size, format
-CacheAssets.ls(dc; pattern = r"canidae")           # filter by label/description
-CacheAssets.ls(dc; sortby = :dateaccessed_desc)    # LRU: oldest access first
-CacheAssets.ls(dc; sortby = :size_desc)            # largest first
-CacheAssets.ls(dc; after = DateTime("2026-01-01T00:00:00"), labeled = true)
+# --- List (data) ---
+entries = CacheAssets.ls(dc)                                 # → Vector{CacheKey}
+entries = CacheAssets.ls(dc; pattern = r"canidae")           # filter by label/description
+entries = CacheAssets.ls(dc; sortby = :dateaccessed_desc)    # LRU: oldest access first
+entries = CacheAssets.ls(dc; sortby = :size_desc)            # largest first
+entries = CacheAssets.ls(dc; after = DateTime("2026-01-01T00:00:00"), labeled = true)
+
+# --- List (display) ---
+CacheAssets.ls!(dc)                                # normal detail: seq, timestamp, label, path
+CacheAssets.ls!(dc; detail = :minimal)             # seq + label only
+CacheAssets.ls!(dc; detail = :full)                # + access time, file size, format
+CacheAssets.ls!(dc; pattern = r"canidae")          # filter by label/description (same as ls)
+CacheAssets.ls!(dc; sortby = :dateaccessed_desc)   # LRU: oldest access first
+CacheAssets.ls!(dc; sortby = :size_desc)           # largest first
+CacheAssets.ls!(dc; io = my_io)                    # redirect output
 
 # --- Remove ---
 CacheAssets.rm(dc, "old_label")                    # by label
@@ -302,7 +309,8 @@ CacheAssets.cp(dc, "canidae_occs", dc2)
 CacheAssets.cp(dc, ["canidae_occs", "dino_taxa"], dc2)   # multiple assets
 
 # --- Default cache (omit the DataCache argument) ---
-CacheAssets.ls()
+CacheAssets.ls()                                   # → Vector{CacheKey}
+CacheAssets.ls!()                                  # prints to stdout
 CacheAssets.rm("stale_entry")
 CacheAssets.mv("old", "new")
 ```
@@ -346,6 +354,9 @@ DataCaches.Caches.defaultstore()  # → ".../c1455f2b-.../caches/user/_GLOBAL"
 DataCaches.Caches.ls()            # → [:user, :module]                          (caches root — default)
 DataCaches.Caches.ls(:user)       # → [:_GLOBAL, :myproject, :taxonomy, ...]    (user stores)
 DataCaches.Caches.ls(:module)     # → [Symbol("uuid1/key1"), ...]               (module stores)
+DataCaches.Caches.ls!()           # prints caches root to stdout
+DataCaches.Caches.ls!(:user)      # prints user store names to stdout
+DataCaches.Caches.ls!(:user; io = my_io)  # redirect output
 
 # Create named caches as usual, then manage them through Caches
 queries = DataCache(:myproject)

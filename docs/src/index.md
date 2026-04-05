@@ -183,10 +183,11 @@ arbitrary `DataCache` objects.
 | `Caches.pwd()` | Scratchspace root path |
 | `Caches.pwd(:name)` | Path to a user named store (`caches/user/<name>`) |
 | `Caches.defaultstore()` | Path to the default store (`caches/user/_GLOBAL`) |
-| `Caches.ls()` | Top-level listing of the caches directory — same as `ls(:root)` |
-| `Caches.ls(:root)` | Top-level listing of the caches directory (e.g. `[:user, :module]`) |
-| `Caches.ls(:user)` | Names of `DataCache(:name)` stores |
-| `Caches.ls(:module)` | `"<uuid>/<key>"` strings for `scratch_datacache!` stores |
+| `Caches.ls()` | Returns `Vector{Symbol}` — caches root listing (same as `ls(:root)`) |
+| `Caches.ls(:root)` | Returns `Vector{Symbol}` — top-level caches subdirs (e.g. `[:user, :module]`) |
+| `Caches.ls(:user)` | Returns `Vector{Symbol}` — names of `DataCache(:name)` stores |
+| `Caches.ls(:module)` | Returns `Vector{Symbol}` — `"<uuid>/<key>"` entries for `scratch_datacache!` stores |
+| `Caches.ls!(storetype; io)` | Prints the result of `ls(storetype)` to `io` (default `stdout`), returns `nothing` |
 | `Caches.rm(:name; force=false)` | Remove a user named store |
 | `Caches.mv(:old, :new)` | Rename user store within scratchspace |
 | `Caches.mv(:name, path)` | Move (export) user store to filesystem path |
@@ -215,40 +216,60 @@ All four functions accept an optional leading `DataCache` argument. When omitted
 
 ### List assets
 
+`ls` returns a `Vector{CacheKey}` for programmatic use; `ls!` prints a formatted
+listing to an `IO` stream and returns `nothing`. Both accept the same filtering and
+sorting keyword arguments.
+
 ```julia
 using DataCaches.CacheAssets
 
-# Default: normal detail level, sorted by sequence index
-CacheAssets.ls(dc)
+# --- Data form: returns Vector{CacheKey} ---
 
-# Terse — just labels
-CacheAssets.ls(dc; detail = :minimal)
-
-# Full — includes last-access time, file size, and data format
-CacheAssets.ls(dc; detail = :full)
+entries = CacheAssets.ls(dc)
 
 # Filter by label/description pattern
-CacheAssets.ls(dc; pattern = r"canidae")
-CacheAssets.ls(dc; pattern = "dino")          # string is converted to Regex
+entries = CacheAssets.ls(dc; pattern = r"canidae")
+entries = CacheAssets.ls(dc; pattern = "dino")          # string is converted to Regex
 
 # Filter by write or access date
-CacheAssets.ls(dc; after  = DateTime("2026-01-01T00:00:00"))
-CacheAssets.ls(dc; before = DateTime("2026-06-01T00:00:00"))
-CacheAssets.ls(dc; accessed_after = DateTime("2026-03-01T00:00:00"))
+entries = CacheAssets.ls(dc; after  = DateTime("2026-01-01T00:00:00"))
+entries = CacheAssets.ls(dc; before = DateTime("2026-06-01T00:00:00"))
+entries = CacheAssets.ls(dc; accessed_after = DateTime("2026-03-01T00:00:00"))
 
 # Filter by whether the entry has a label
-CacheAssets.ls(dc; labeled = true)   # only labeled entries
-CacheAssets.ls(dc; labeled = false)  # only unlabeled entries
+entries = CacheAssets.ls(dc; labeled = true)   # only labeled entries
+entries = CacheAssets.ls(dc; labeled = false)  # only unlabeled entries
 
 # Sort
-CacheAssets.ls(dc; sortby = :date_desc)          # newest first
-CacheAssets.ls(dc; sortby = :dateaccessed_desc)  # least recently used last
-CacheAssets.ls(dc; sortby = :size_desc)          # largest first (requires stat)
-CacheAssets.ls(dc; sortby = :label)
+entries = CacheAssets.ls(dc; sortby = :date_desc)          # newest first
+entries = CacheAssets.ls(dc; sortby = :dateaccessed_desc)  # least recently used last
+entries = CacheAssets.ls(dc; sortby = :size_desc)          # largest first (requires stat)
+entries = CacheAssets.ls(dc; sortby = :label)
 
 # Use default cache (default_filecache())
-CacheAssets.ls()
-CacheAssets.ls(; detail = :full, sortby = :date_desc)
+entries = CacheAssets.ls()
+entries = CacheAssets.ls(; sortby = :date_desc)
+
+# --- Display form: prints to io, returns nothing ---
+
+# Default: normal detail level, sorted by sequence index
+CacheAssets.ls!(dc)
+
+# Terse — just labels
+CacheAssets.ls!(dc; detail = :minimal)
+
+# Full — includes last-access time, file size, and data format
+CacheAssets.ls!(dc; detail = :full)
+
+# All ls filter/sort kwargs are also accepted by ls!
+CacheAssets.ls!(dc; pattern = r"canidae", sortby = :date_desc)
+
+# Redirect output
+CacheAssets.ls!(dc; io = my_io)
+
+# Use default cache
+CacheAssets.ls!()
+CacheAssets.ls!(; detail = :full, sortby = :date_desc)
 ```
 
 ### Remove assets

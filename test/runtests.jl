@@ -636,6 +636,79 @@ using ZipFile
 
     end
 
+    @testset "CacheAssets.ls / ls!" begin
+
+        @testset "ls returns a Vector of all entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "alpha")
+                write!(c, rand(3); label = "beta")
+                result = DataCaches.CacheAssets.ls(c)
+                @test result isa Vector
+                @test length(result) == 2
+            end
+        end
+
+        @testset "ls filters by pattern" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "alpha")
+                write!(c, rand(3); label = "beta")
+                result = DataCaches.CacheAssets.ls(c; pattern = r"alph")
+                @test length(result) == 1
+                @test result[1].label == "alpha"
+            end
+        end
+
+        @testset "ls filters by labeled flag" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "named")
+                write!(c, rand(3))
+                @test length(DataCaches.CacheAssets.ls(c; labeled = true))  == 1
+                @test length(DataCaches.CacheAssets.ls(c; labeled = false)) == 1
+                @test length(DataCaches.CacheAssets.ls(c))                  == 2
+            end
+        end
+
+        @testset "ls! prints to io and returns nothing" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "alpha")
+                buf = IOBuffer()
+                result = DataCaches.CacheAssets.ls!(c; io = buf)
+                @test result === nothing
+                @test length(take!(buf)) > 0
+            end
+        end
+
+        @testset "ls! with detail=:full prints to io and returns nothing" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "alpha")
+                buf = IOBuffer()
+                result = DataCaches.CacheAssets.ls!(c; detail = :full, io = buf)
+                @test result === nothing
+                output = String(take!(buf))
+                @test occursin("alpha", output)
+            end
+        end
+
+        @testset "ls and ls! accept the same filter kwargs" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "alpha")
+                write!(c, rand(3); label = "beta")
+                entries = DataCaches.CacheAssets.ls(c; pattern = r"beta", sortby = :label)
+                @test length(entries) == 1
+                buf = IOBuffer()
+                DataCaches.CacheAssets.ls!(c; pattern = r"beta", sortby = :label, io = buf)
+                @test occursin("beta", String(take!(buf)))
+            end
+        end
+
+    end
+
     @testset "Caches" begin
 
         mktempdir() do _fake_depot
@@ -699,6 +772,23 @@ using ZipFile
                     append!(Base.DEPOT_PATH, orig)
                 end
             end
+        end
+
+        @testset "ls!(:user) prints store names and returns nothing" begin
+            _ = DataCache(:_caches_ls_bang_test_store)
+            buf = IOBuffer()
+            result = DataCaches.Caches.ls!(:user; io = buf)
+            @test result === nothing
+            output = String(take!(buf))
+            @test occursin("_caches_ls_bang_test_store", output)
+        end
+
+        @testset "ls!() prints to stdout and returns nothing" begin
+            _ = DataCache(:_caches_ls_bang_root_store)
+            buf = IOBuffer()
+            result = DataCaches.Caches.ls!(:root; io = buf)
+            @test result === nothing
+            @test length(take!(buf)) > 0
         end
 
         @testset "rm removes a named depot store" begin

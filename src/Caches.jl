@@ -65,6 +65,8 @@ List the names of store categories or stores in the DataCaches cache directory.
   `<caches>/module/<uuid>/<key>/`. Returns `Symbol("<uuid>/<key>")` entries.
 
 Returns an empty vector if the relevant directory does not yet exist.
+
+See also [`ls!`](@ref) for a display-oriented variant that prints to an `IO` stream.
 """
 function ls(storetype::Symbol = :root)
     if storetype === :user
@@ -95,6 +97,25 @@ function ls(storetype::Symbol = :root)
     else
         error("Unknown storetype $(repr(storetype)); expected :root, :user, or :module")
     end
+end
+
+"""
+    DataCaches.Caches.ls!(storetype::Symbol = :root; io::IO = stdout) → nothing
+
+Print the names of store categories or stores in the DataCaches cache directory to `io`.
+
+Accepts the same `storetype` argument as [`ls`](@ref). Returns `nothing`.
+"""
+function ls!(storetype::Symbol = :root; io::IO = stdout)
+    names = ls(storetype)
+    if isempty(names)
+        println(io, "(no stores)")
+    else
+        for n in names
+            println(io, n)
+        end
+    end
+    return nothing
 end
 
 """
