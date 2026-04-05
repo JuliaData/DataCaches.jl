@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0]
 
 ### Added
 
@@ -9,6 +9,14 @@
 
 - **`DataCaches.Caches`** to provide a filesystem-like interface to managing 
   different caches within the package depot scratchspace: `Caches.ls`, `Caches.rm`, etc.
+
+- **Library Integration guide** (`docs/src/integration.md`): New documentation page
+  covering three standard integration patterns with complete working module examples:
+  - **Pattern A** — package-private data store (`scratch_datacache!`, no user-visible
+    autocaching)
+  - **Pattern B** — instrumented functions, user controls which cache is used
+  - **Pattern C** — instrumented functions with a package-owned default store
+    (`package_cache` kwarg), overridable by the user
 
 - **`package_cache` kwarg on `autocache`**: Library authors can now pass a
   `package_cache::Union{DataCache,Nothing}` to `autocache` to specify a package-owned
@@ -23,14 +31,6 @@
   the active cache was user-supplied or defaulted. This is the mechanism that gives
   `package_cache` its correct priority without changing the return value or public
   behaviour of `set_autocaching!`.
-
-- **Library Integration guide** (`docs/src/integration.md`): New documentation page
-  covering three standard integration patterns with complete working module examples:
-  - **Pattern A** — package-private data store (`scratch_datacache!`, no user-visible
-    autocaching)
-  - **Pattern B** — instrumented functions, user controls which cache is used
-  - **Pattern C** — instrumented functions with a package-owned default store
-    (`package_cache` kwarg), overridable by the user
 
 - **`migrate_v020_defaultcache(; conflict=:skip)`**: Migrates the default cache from
   its v0.2.0 location (`<depot>/caches/defaultcache/`) to the new user silo location
