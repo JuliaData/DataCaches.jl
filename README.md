@@ -99,13 +99,23 @@ Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 
 ### Cache store setup
 
-Before caching anything, create a `DataCache`. There is a gradient from zero-configuration to full control:
+Before caching anything, open a `DataCache`. 
+There is a gradient from zero-configuration to full control:
 
 ```julia
-# Zero config — lifecycle-managed default store, no path required
-dc = DataCache()
+using DataCaches
 
-# Named store — still lifecycle-managed, useful for separating projects
+# Zero config — lifecycle-managed userwide-global default store
+# managed in the package internal cache depot (see `DataCache.Caches`
+# for functions).
+# The default file cache is the cache that will be used if 
+# we do NOT specify a cache explicitly. If not
+# set by an environmental variable, this is 
+# identical to calling `DataCache(:_GLOBAL)`:
+dc = DataCaches.default_filecache()
+
+# Named store — still lifecycle-managed, useful 
+# for separating projects specific 
 dc = DataCache(:project123)
 
 # Explicit path — full portability, shareable across systems
@@ -129,10 +139,16 @@ using DataCaches, PaleobiologDB
 # Optional: show caching operations in debug logs
 ENV["JULIA_DEBUG"] = "DataCaches"
 
+# Here we use a siloed project specific cache.
 dc = DataCache(:myproject)
+set_default_filecache!(dc)
+
+# If we did not run `set_default_filecache!` above
+# , then the default cache will be used in all 
+# the patterns below, with `dc` being given by:
+# dc = DataCaches.default_filecache()
 
 # --- Pattern 1: @filecache — works with any function, no setup beyond the cache ---
-set_default_filecache!(dc)
 occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")  # fetches + stores
 occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")  # from cache
 
