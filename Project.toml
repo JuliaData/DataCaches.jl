@@ -1,6 +1,6 @@
 name = "DataCaches"
 uuid = "c1455f2b-6d6f-4f37-b463-919f923708a5"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Jeet Sukumaran <jeetsukumaran@gmail.com>"]
 
 [deps]

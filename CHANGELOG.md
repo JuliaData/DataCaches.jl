@@ -2,17 +2,13 @@
 
 ## [Unreleased]
 
-### Changed
-
-- **`Depot` submodule renamed to `Caches`**: `DataCaches.Depot` is now `DataCaches.Caches`.
-  All functions (`pwd`, `ls`, `defaultstore`, `rm`, `mv`, `cp`) are unchanged; only the
-  module name differs. Update call sites from `DataCaches.Depot.*` to `DataCaches.Caches.*`.
-
-- **`Caches.ls()` default changed to `:root`**: `DataCaches.Caches.ls()` (no argument)
-  now returns the raw root subdirectory listing (e.g. `[:caches]`) instead of user store
-  names. Use `DataCaches.Caches.ls(:user)` for named user stores.
-
 ### Added
+
+- **`DataCaches.CacheAssets`** to provide a filesystem-like interface to managing 
+  cache assets within a single cache: `CacheAssets.ls`, `CacheAssets.rm`, etc.
+
+- **`DataCaches.Caches`** to provide a filesystem-like interface to managing 
+  different caches within the package depot scratchspace: `Caches.ls`, `Caches.rm`, etc.
 
 - **`package_cache` kwarg on `autocache`**: Library authors can now pass a
   `package_cache::Union{DataCache,Nothing}` to `autocache` to specify a package-owned
@@ -36,21 +32,20 @@
   - **Pattern C** — instrumented functions with a package-owned default store
     (`package_cache` kwarg), overridable by the user
 
-### Removed
-
-- `Depot.test_datacache!` and `Depot.cleanuptests`: removed as a public API. The Depot
-  test suite now redirects `Base.DEPOT_PATH` to a temporary directory for the duration
-  of each run, so all depot operations are fully isolated without needing a dedicated
-  test-area subdirectory.
-
-### Added
-
 - **`migrate_v020_defaultcache(; conflict=:skip)`**: Migrates the default cache from
   its v0.2.0 location (`<depot>/caches/defaultcache/`) to the new user silo location
   (`<depot>/caches/user/_GLOBAL/`). Same wholesale-move / merge-import semantics as
   `migrate_legacy_defaultcache`. Idempotent — safe to call multiple times.
 
 ### Changed
+
+- **`Depot` submodule renamed to `Caches`**: `DataCaches.Depot` is now `DataCaches.Caches`.
+  All functions (`pwd`, `ls`, `defaultstore`, `rm`, `mv`, `cp`) are unchanged; only the
+  module name differs. Update call sites from `DataCaches.Depot.*` to `DataCaches.Caches.*`.
+
+- **`Caches.ls()` default changed to `:root`**: `DataCaches.Caches.ls()` (no argument)
+  now returns the raw root subdirectory listing (e.g. `[:caches]`) instead of user store
+  names. Use `DataCaches.Caches.ls(:user)` for named user stores.
 
 - **`caches/local/` renamed to `caches/user/`**: Named user stores (`DataCache(:name)`)
   now live under `<depot>/caches/user/<name>/` instead of `<depot>/caches/local/<name>/`.
@@ -69,6 +64,13 @@
   deferred to the `autocache` call site (a library-supplied `package_cache` takes
   priority over `default_filecache()`).
 - README: new "Package-owned default cache" subsection in the Integration API section.
+
+### Removed
+
+- `Depot.test_datacache!` and `Depot.cleanuptests`: removed as a public API. The Depot
+  test suite now redirects `Base.DEPOT_PATH` to a temporary directory for the duration
+  of each run, so all depot operations are fully isolated without needing a dedicated
+  test-area subdirectory.
 
 ## [0.2.0]
 
