@@ -146,7 +146,7 @@ end
             _orig = copy(Base.DEPOT_PATH)
             empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
             try
-                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                old_path = joinpath(DataCaches.Caches._caches_dir(), "defaultcache")
                 mkpath(old_path)
                 old_c = DataCache(old_path)
                 write!(old_c, [1, 2, 3]; label = "v020_entry")
@@ -173,7 +173,7 @@ end
             _orig = copy(Base.DEPOT_PATH)
             empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
             try
-                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                old_path = joinpath(DataCaches.Caches._caches_dir(), "defaultcache")
                 mkpath(old_path)
                 old_c = DataCache(old_path)
                 write!(old_c, [1, 2, 3]; label = "v020_entry")
@@ -203,7 +203,7 @@ end
             _orig = copy(Base.DEPOT_PATH)
             empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
             try
-                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                old_path = joinpath(DataCaches.Caches._caches_dir(), "defaultcache")
                 mkpath(old_path)
                 old_c = DataCache(old_path)
                 write!(old_c, [1, 1]; label = "shared")
@@ -229,7 +229,7 @@ end
             _orig = copy(Base.DEPOT_PATH)
             empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
             try
-                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                old_path = joinpath(DataCaches.Caches._caches_dir(), "defaultcache")
                 mkpath(old_path)
                 old_c = DataCache(old_path)
                 write!(old_c, [1, 1]; label = "shared")
@@ -255,7 +255,7 @@ end
             _orig = copy(Base.DEPOT_PATH)
             empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
             try
-                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                old_path = joinpath(DataCaches.Caches._caches_dir(), "defaultcache")
                 mkpath(old_path)
                 old_c = DataCache(old_path)
                 write!(old_c, [7, 8, 9]; label = "idem_entry")

@@ -155,7 +155,7 @@ const _DATACACHES_UUID = Base.UUID("c1455f2b-6d6f-4f37-b463-919f923708a5")
 
 function _default_cache_dir()
     haskey(ENV, "DATACACHES_DEFAULT_STORE") && return ENV["DATACACHES_DEFAULT_STORE"]
-    store = joinpath(Depot._user_dir(), "_GLOBAL")
+    store = joinpath(Caches._user_dir(), "_GLOBAL")
     mkpath(store)
     return store
 end
@@ -169,7 +169,7 @@ function DataCache(store::AbstractString = _default_cache_dir())
 end
 
 function DataCache(key::Symbol)
-    store = joinpath(Depot._user_dir(), string(key))
+    store = joinpath(Caches._user_dir(), string(key))
     return DataCache(store)
 end
 
@@ -201,7 +201,7 @@ end
 ```
 """
 function scratch_datacache!(pkg_uuid::Base.UUID, key::Symbol = :datacache)
-    store = joinpath(Depot._module_dir(), string(pkg_uuid), string(key))
+    store = joinpath(Caches._module_dir(), string(pkg_uuid), string(key))
     mkpath(store)
     return DataCache(store)
 end
@@ -561,7 +561,7 @@ end
 
 public movecache!
 public importcache!
-public Depot
+public Caches
 
 """
     DataCaches.movecache!(cache::DataCache, new_path::AbstractString) → DataCache
@@ -1116,8 +1116,8 @@ macro filecache!(cache, expr)
     return _filecache_refresh_impl(expr, esc(cache))
 end
 
-include("Depot.jl")
-Depot._datacache_ctor[] = DataCache
+include("Caches.jl")
+Caches._datacache_ctor[] = DataCache
 include("_migrate_legacy_defaultcache.jl")
 
 end # module

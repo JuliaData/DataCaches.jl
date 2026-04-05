@@ -59,7 +59,7 @@ function migrate_legacy_defaultcache(; conflict::Symbol = :skip)
     legacy_path = joinpath(homedir(), ".cache", "DataCaches", "_DEFAULT")
     isdir(legacy_path) || return false
 
-    new_path = Depot.defaultstore()  # respects DATACACHES_DEFAULT_STORE
+    new_path = Caches.defaultstore()  # respects DATACACHES_DEFAULT_STORE
 
     if !isdir(new_path)
         # New store does not exist yet — move the whole directory wholesale.
@@ -125,10 +125,10 @@ DataCaches.migrate_v020_defaultcache(; conflict = :overwrite)
 function migrate_v020_defaultcache(; conflict::Symbol = :skip)
     # The v0.2.0 path is always <depot>/caches/defaultcache/,
     # regardless of DATACACHES_DEFAULT_STORE.
-    old_path = joinpath(Depot._caches_dir(), "defaultcache")
+    old_path = joinpath(Caches._caches_dir(), "defaultcache")
     isdir(old_path) || return false
 
-    new_path = Depot.defaultstore()  # respects DATACACHES_DEFAULT_STORE
+    new_path = Caches.defaultstore()  # respects DATACACHES_DEFAULT_STORE
 
     if !isdir(new_path)
         # New store does not exist yet — move the whole directory wholesale.

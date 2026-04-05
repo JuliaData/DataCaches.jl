@@ -636,7 +636,7 @@ using ZipFile
 
     end
 
-    @testset "Depot" begin
+    @testset "Caches" begin
 
         mktempdir() do _fake_depot
             _orig_depot_path = copy(Base.DEPOT_PATH)
@@ -645,48 +645,55 @@ using ZipFile
             try
 
         @testset "pwd() returns depot root path" begin
-            root = DataCaches.Depot.pwd()
+            root = DataCaches.Caches.pwd()
             @test root isa String
             @test endswith(root, "c1455f2b-6d6f-4f37-b463-919f923708a5")
         end
 
         @testset "pwd(::Symbol) returns named store path inside depot" begin
-            root = DataCaches.Depot.pwd()
-            named = DataCaches.Depot.pwd(:mytest)
+            root = DataCaches.Caches.pwd()
+            named = DataCaches.Caches.pwd(:mytest)
             @test named == joinpath(root, "caches", "user", "mytest")
         end
 
         @testset "defaultstore() respects DATACACHES_DEFAULT_STORE env var" begin
             mktempdir() do dir
                 withenv("DATACACHES_DEFAULT_STORE" => dir) do
-                    @test DataCaches.Depot.defaultstore() == dir
+                    @test DataCaches.Caches.defaultstore() == dir
                 end
             end
         end
 
         @testset "defaultstore() falls back to depot/caches/user/_GLOBAL" begin
             withenv("DATACACHES_DEFAULT_STORE" => nothing) do
-                ds = DataCaches.Depot.defaultstore()
+                ds = DataCaches.Caches.defaultstore()
                 @test endswith(ds, joinpath("c1455f2b-6d6f-4f37-b463-919f923708a5", "caches", "user", "_GLOBAL"))
             end
         end
 
-        @testset "ls() returns names of existing depot stores" begin
-            # Create a named store so the depot exists
-            _ = DataCache(:_depot_ls_test_store)
-            names = DataCaches.Depot.ls()
+        @testset "ls() returns root subdirs by default" begin
+            # Create a named store so the scratchspace root exists
+            _ = DataCache(:_caches_ls_test_store)
+            names = DataCaches.Caches.ls()
             @test names isa Vector{Symbol}
-            @test :_depot_ls_test_store in names
+            @test :caches in names  # ls() defaults to :root — returns top-level dirs
         end
 
-        @testset "ls() returns empty vector when depot absent" begin
-            # Temporarily point to a non-existent depot via a fake DEPOT_PATH
+        @testset "ls(:user) returns names of existing user stores" begin
+            _ = DataCache(:_caches_ls_test_store)
+            names = DataCaches.Caches.ls(:user)
+            @test names isa Vector{Symbol}
+            @test :_caches_ls_test_store in names
+        end
+
+        @testset "ls() returns empty vector when scratchspace absent" begin
+            # Temporarily point to a non-existent scratchspace via a fake DEPOT_PATH
             orig = copy(Base.DEPOT_PATH)
             mktempdir() do fake_depot
                 empty!(Base.DEPOT_PATH)
                 push!(Base.DEPOT_PATH, fake_depot)
                 try
-                    @test DataCaches.Depot.ls() == Symbol[]
+                    @test DataCaches.Caches.ls() == Symbol[]
                 finally
                     empty!(Base.DEPOT_PATH)
                     append!(Base.DEPOT_PATH, orig)
@@ -696,17 +703,17 @@ using ZipFile
 
         @testset "rm removes a named depot store" begin
             _ = DataCache(:_depot_rm_target)
-            @test :_depot_rm_target in DataCaches.Depot.ls() || true  # store exists after create
-            DataCaches.Depot.rm(:_depot_rm_target)
-            @test !(:_depot_rm_target in DataCaches.Depot.ls())
+            @test :_depot_rm_target in DataCaches.Caches.ls(:user) || true  # store exists after create
+            DataCaches.Caches.rm(:_depot_rm_target)
+            @test !(:_depot_rm_target in DataCaches.Caches.ls(:user))
         end
 
         @testset "rm with force=true silently handles missing store" begin
-            @test_nowarn DataCaches.Depot.rm(:_depot_nonexistent_store; force=true)
+            @test_nowarn DataCaches.Caches.rm(:_depot_nonexistent_store; force=true)
         end
 
         @testset "rm without force errors on missing store" begin
-            @test_throws ErrorException DataCaches.Depot.rm(:_depot_nonexistent_store_err)
+            @test_throws ErrorException DataCaches.Caches.rm(:_depot_nonexistent_store_err)
         end
 
         @testset "mv(::Symbol, ::Symbol) renames within depot" begin
@@ -714,14 +721,14 @@ using ZipFile
             c = DataCache(:_depot_mv_src)
             write!(c, [1, 2, 3]; label = "mv_payload")
 
-            DataCaches.Depot.mv(:_depot_mv_src, :_depot_mv_dst)
+            DataCaches.Caches.mv(:_depot_mv_src, :_depot_mv_dst)
 
-            @test !(:_depot_mv_src in DataCaches.Depot.ls())
-            @test :_depot_mv_dst in DataCaches.Depot.ls()
+            @test !(:_depot_mv_src in DataCaches.Caches.ls(:user))
+            @test :_depot_mv_dst in DataCaches.Caches.ls(:user)
             c2 = DataCache(:_depot_mv_dst)
             @test haskey(c2, "mv_payload")
 
-            DataCaches.Depot.rm(:_depot_mv_dst)
+            DataCaches.Caches.rm(:_depot_mv_dst)
         end
 
         @testset "mv(::Symbol, ::AbstractString) exports from depot" begin
@@ -731,9 +738,9 @@ using ZipFile
                 write!(c, [7, 8, 9]; label = "export_payload")
                 dst = joinpath(base, "exported")
 
-                DataCaches.Depot.mv(:_depot_mv_export_src, dst)
+                DataCaches.Caches.mv(:_depot_mv_export_src, dst)
 
-                @test !(:_depot_mv_export_src in DataCaches.Depot.ls())
+                @test !(:_depot_mv_export_src in DataCaches.Caches.ls(:user))
                 @test isdir(dst)
                 c2 = DataCache(dst)
                 @test haskey(c2, "export_payload")
@@ -746,14 +753,14 @@ using ZipFile
                 c = DataCache(ext_dir)
                 write!(c, [4, 5, 6]; label = "import_payload")
 
-                DataCaches.Depot.mv(ext_dir, :_depot_mv_import_dst)
+                DataCaches.Caches.mv(ext_dir, :_depot_mv_import_dst)
 
                 @test !isdir(ext_dir)
-                @test :_depot_mv_import_dst in DataCaches.Depot.ls()
+                @test :_depot_mv_import_dst in DataCaches.Caches.ls(:user)
                 c2 = DataCache(:_depot_mv_import_dst)
                 @test haskey(c2, "import_payload")
 
-                DataCaches.Depot.rm(:_depot_mv_import_dst)
+                DataCaches.Caches.rm(:_depot_mv_import_dst)
             end
         end
 
@@ -762,15 +769,15 @@ using ZipFile
             c = DataCache(:_depot_cp_src)
             write!(c, [10, 20]; label = "cp_payload")
 
-            DataCaches.Depot.cp(:_depot_cp_src, :_depot_cp_dst)
+            DataCaches.Caches.cp(:_depot_cp_src, :_depot_cp_dst)
 
-            @test :_depot_cp_src in DataCaches.Depot.ls()
-            @test :_depot_cp_dst in DataCaches.Depot.ls()
+            @test :_depot_cp_src in DataCaches.Caches.ls(:user)
+            @test :_depot_cp_dst in DataCaches.Caches.ls(:user)
             c2 = DataCache(:_depot_cp_dst)
             @test haskey(c2, "cp_payload")
 
-            DataCaches.Depot.rm(:_depot_cp_src)
-            DataCaches.Depot.rm(:_depot_cp_dst)
+            DataCaches.Caches.rm(:_depot_cp_src)
+            DataCaches.Caches.rm(:_depot_cp_dst)
         end
 
         @testset "cp(::Symbol, ::AbstractString) exports copy from depot" begin
@@ -780,14 +787,14 @@ using ZipFile
                 write!(c, [11, 22]; label = "cp_export_payload")
                 dst = joinpath(base, "cp_exported")
 
-                DataCaches.Depot.cp(:_depot_cp_export_src, dst)
+                DataCaches.Caches.cp(:_depot_cp_export_src, dst)
 
-                @test :_depot_cp_export_src in DataCaches.Depot.ls()
+                @test :_depot_cp_export_src in DataCaches.Caches.ls(:user)
                 @test isdir(dst)
                 c2 = DataCache(dst)
                 @test haskey(c2, "cp_export_payload")
 
-                DataCaches.Depot.rm(:_depot_cp_export_src)
+                DataCaches.Caches.rm(:_depot_cp_export_src)
             end
         end
 
@@ -797,14 +804,14 @@ using ZipFile
                 c = DataCache(ext_dir)
                 write!(c, [33, 44]; label = "cp_import_payload")
 
-                DataCaches.Depot.cp(ext_dir, :_depot_cp_import_dst)
+                DataCaches.Caches.cp(ext_dir, :_depot_cp_import_dst)
 
                 @test isdir(ext_dir)  # source preserved
-                @test :_depot_cp_import_dst in DataCaches.Depot.ls()
+                @test :_depot_cp_import_dst in DataCaches.Caches.ls(:user)
                 c2 = DataCache(:_depot_cp_import_dst)
                 @test haskey(c2, "cp_import_payload")
 
-                DataCaches.Depot.rm(:_depot_cp_import_dst)
+                DataCaches.Caches.rm(:_depot_cp_import_dst)
             end
         end
 

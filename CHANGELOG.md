@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`Depot` submodule renamed to `Caches`**: `DataCaches.Depot` is now `DataCaches.Caches`.
+  All functions (`pwd`, `ls`, `defaultstore`, `rm`, `mv`, `cp`) are unchanged; only the
+  module name differs. Update call sites from `DataCaches.Depot.*` to `DataCaches.Caches.*`.
+
+- **`Caches.ls()` default changed to `:root`**: `DataCaches.Caches.ls()` (no argument)
+  now returns the raw root subdirectory listing (e.g. `[:caches]`) instead of user store
+  names. Use `DataCaches.Caches.ls(:user)` for named user stores.
+
 ### Added
 
 - **`package_cache` kwarg on `autocache`**: Library authors can now pass a
