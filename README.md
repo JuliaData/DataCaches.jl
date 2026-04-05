@@ -166,36 +166,6 @@ set_autocaching!(false)
 
 ---
 
-## Cache Store
-
-`DataCache` constructors span a gradient from zero-configuration to full path control:
-
-```julia
-# Zero config — lifecycle-managed default store
-dc = DataCache()
-
-# Named store — lifecycle-managed, no path management required
-dc = DataCache(:project123)
-
-# Explicit path — portable, shareable across systems or users
-dc = DataCache(joinpath(homedir(), ".datacaches", "project1"))
-
-# Module-scoped — for package authors, namespaced by package UUID
-dc = DataCaches.scratch_datacache!(MyPackage_UUID, :results)
-```
-
-`DataCache()` and `DataCache(:name)` store data inside DataCaches.jl's Scratch.jl depot
-(`~/.julia/scratchspaces/<DataCaches-UUID>/caches/`) and are automatically removed when
-DataCaches.jl is uninstalled and `Pkg.gc()` is run — no manual cleanup needed.
-
-`DataCache("/path")` gives full control and portability: copy or archive the directory
-to share a cache across machines or users.
-
-`scratch_datacache!` is intended for package authors who need a cache scoped to their
-package's UUID with no risk of collision. See [Using DataCaches.jl inside a package](#using-datacachesjl-inside-a-package-module-scoped-cache).
-
----
-
 ## Usage Patterns
 
 ### Pattern 1 — Memoized function calls
@@ -291,6 +261,7 @@ memcache_clear!()   # discard all in-memory results
 
 The most transparent pattern. You control exactly what is stored and when it is
 retrieved, using dictionary-style indexing. Works with any data source.
+The explicit labeling makes it especially useful for packaging results for sharing or export.
 
 ```julia
 using DataCaches, PaleobiologyDB
@@ -333,6 +304,7 @@ showcache(dc)
 #   ...
 
 # Rename a label
+# Also see: `DataCaches.CacheAssets.mv`
 relabel!(dc, "canidae_occs", "canidae")   # by label
 relabel!(dc, 2, "canidae")                # by sequence index
 
@@ -340,6 +312,7 @@ relabel!(dc, 2, "canidae")                # by sequence index
 df = dc[1]
 
 # Remove entries
+# Also see: `DataCaches.CacheAssets.rm`
 delete!(dc, "trilobites")   # by label
 delete!(dc, 2)              # by sequence index
 clear!(dc)                  # remove all entries
@@ -367,8 +340,14 @@ using DataCaches, PaleobiologyDB
 # Optional: track caching operations in debug logs
 ENV["JULIA_DEBUG"] = "DataCaches"
 
-dc = DataCache(:project1)
-set_autocaching!(true; cache = dc)
+# Enable autocaching, using the default global cache
+set_autocaching!(true)
+
+# If we do not want to rely on the default global cache, 
+# "`:_GLOBAL`", as the above does, we can open a project 
+# silo:
+# dc = DataCache(:project1)
+# set_autocaching!(true; cache = dc)
 
 # All pbdb_* calls now cache automatically — no changes to call sites
 occs  = pbdb_occurrences(base_name = "Canidae")           # fetches + stores
@@ -434,9 +413,8 @@ The wrapper body has three moving parts:
 #### Package-owned default cache
 
 By default, when the user calls `set_autocaching!(true)` without an explicit `cache`
-argument, results go to the shared [`default_filecache()`](https://juliadata.org/DataCaches.jl).
-If your package should instead write to its own namespaced
-[`scratch_datacache!`](https://juliadata.org/DataCaches.jl) store by default — while
+argument, results go to the shared `default_filecache()`.
+If your package should instead write to its own module-namespace package silo by default — while
 still letting the user override with `set_autocaching!(true; cache=x)` — pass a
 `package_cache` kwarg to `autocache`:
 
@@ -472,7 +450,7 @@ Store resolution priority:
 2. **`package_cache`** — used when no explicit user cache was set
 3. **`default_filecache()`** — final fallback
 
-See the [Library Integration guide](https://juliadata.org/DataCaches.jl/integration/)
+See the Library Integration guide in the [full documentation](https://juliadata.org/DataCaches.jl/)
 for complete working examples of all three patterns (private cache, user-controlled
 cache, and package-owned default cache).
 
@@ -527,14 +505,6 @@ See [`test/README.md`](test/README.md) for more options.
 
 ---
 
-## Environment variable
-
-| Variable | Default | Description |
-|---|---|---|
-| `DATACACHES_DEFAULT_STORE` | See below | Override the default store used by `DataCache()` (no-argument constructor) |
-
-When `DATACACHES_DEFAULT_STORE` is not set, the no-argument `DataCache()` constructor stores its data inside the DataCaches depot at `~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_GLOBAL/`. This is equivalent to `DataCache(:_GLOBAL)`. The default cache is automatically removed if DataCaches.jl is ever uninstalled and `Pkg.gc()` is run.
-
 ## Named depot caches
 
 Pass a `Symbol` to `DataCache` to create a named user cache inside DataCaches.jl's
@@ -563,59 +533,7 @@ function __init__()
 end
 ```
 
-## Caches — managing named caches
-
-`DataCaches.Caches` is a submodule that provides a filesystem-style interface for
-browsing and managing the caches that live in the DataCaches scratchspace
-(`~/.julia/scratchspaces/<DataCaches-UUID>/`). It is public but not exported;
-access it as `DataCaches.Caches`.
-
-The scratchspace uses a structured subdirectory layout:
-
-```
-~/.julia/scratchspaces/<DataCaches-UUID>/
-  caches/
-    user/
-      _GLOBAL/             ← DataCache() / DataCache(:_GLOBAL) default store
-      <name>/              ← DataCache(:name) stores
-    module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
-```
-
-```julia
-using DataCaches
-
-# Inspect the scratchspace
-DataCaches.Caches.pwd()           # → "/home/user/.julia/scratchspaces/c1455f2b-..."
-DataCaches.Caches.defaultstore()  # → ".../c1455f2b-.../caches/user/_GLOBAL"
-DataCaches.Caches.ls()            # → [:user, :module]                          (caches root — default)
-DataCaches.Caches.ls(:user)       # → [:_GLOBAL, :myproject, :taxonomy, ...]    (user stores)
-DataCaches.Caches.ls(:module)     # → [Symbol("uuid1/key1"), ...]               (module stores)
-
-# Create named caches as usual, then manage them through Caches
-queries = DataCache(:myproject)
-taxa    = DataCache(:taxonomy)
-
-# Rename within scratchspace
-DataCaches.Caches.mv(:myproject, :archived_project)
-
-# Copy within scratchspace
-DataCaches.Caches.cp(:taxonomy, :taxonomy_backup)
-
-# Export to / import from the filesystem
-DataCaches.Caches.mv(:archived_project, "/data/exports/myproject")  # move out
-DataCaches.Caches.mv("/data/imports/shared_cache", :shared)         # move in
-DataCaches.Caches.cp(:taxonomy, "/tmp/taxonomy_snapshot")           # copy out
-
-# Remove
-DataCaches.Caches.rm(:taxonomy_backup)
-DataCaches.Caches.rm(:nonexistent; force=true)  # silently ignore if absent
-```
-
-See the [full API reference](https://juliadata.org/DataCaches.jl) for complete
-documentation of each function.
-
 ---
-
 ## CacheAssets — managing assets within a cache
 
 `DataCaches.CacheAssets` is a submodule that provides a filesystem-style interface
@@ -676,33 +594,58 @@ or that contain many entries, opt out by constructing the cache with
 dc = DataCache(:high_frequency; track_access = false)
 ```
 
----
+## Caches — managing named caches
 
-## Using DataCaches.jl inside a package (module-scoped cache)
+`DataCaches.Caches` is a submodule that provides a filesystem-style interface for
+browsing and managing the caches (rather than assets within a particular cache) that live in the DataCaches scratchspace
+(`~/.julia/scratchspaces/<DataCaches-UUID>/`). It is public but not exported;
+access it as `DataCaches.Caches`.
 
-Use `scratch_datacache!` with your package's UUID to create a named cache scoped to
-your package's identity, stored under `<DataCaches-depot>/caches/module/<your-UUID>/<key>/`:
+The scratchspace uses a structured subdirectory layout:
 
-```julia
-module MyPackage
-using DataCaches
-
-const _MY_UUID = Base.UUID("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")  # copy from Project.toml
-const _CACHE = Ref{Union{DataCache,Nothing}}(nothing)
-
-function __init__()
-    _CACHE[] = DataCaches.scratch_datacache!(_MY_UUID, :results)
-end
-
-get_cache() = _CACHE[]
-end
+```
+~/.julia/scratchspaces/<DataCaches-UUID>/
+  caches/
+    user/
+      _GLOBAL/             ← DataCache() / DataCache(:_GLOBAL) default store
+      <name>/              ← DataCache(:name) stores
+    module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
 ```
 
-The cache is namespaced by UUID so it will not collide with stores from other packages.
-Use different `key` strings (second argument) to maintain independent cache stores
-within the same package. The cache is managed as part of the DataCaches depot and is
-removed when DataCaches.jl is uninstalled and `Pkg.gc()` is run.
+```julia
+using DataCaches
 
+# Inspect the scratchspace
+DataCaches.Caches.pwd()           # → "/home/user/.julia/scratchspaces/c1455f2b-..."
+DataCaches.Caches.defaultstore()  # → ".../c1455f2b-.../caches/user/_GLOBAL"
+DataCaches.Caches.ls()            # → [:user, :module]                          (caches root — default)
+DataCaches.Caches.ls(:user)       # → [:_GLOBAL, :myproject, :taxonomy, ...]    (user stores)
+DataCaches.Caches.ls(:module)     # → [Symbol("uuid1/key1"), ...]               (module stores)
+
+# Create named caches as usual, then manage them through Caches
+queries = DataCache(:myproject)
+taxa    = DataCache(:taxonomy)
+
+# Rename within scratchspace
+DataCaches.Caches.mv(:myproject, :archived_project)
+
+# Copy within scratchspace
+DataCaches.Caches.cp(:taxonomy, :taxonomy_backup)
+
+# Export to / import from the filesystem
+DataCaches.Caches.mv(:archived_project, "/data/exports/myproject")  # move out
+DataCaches.Caches.mv("/data/imports/shared_cache", :shared)         # move in
+DataCaches.Caches.cp(:taxonomy, "/tmp/taxonomy_snapshot")           # copy out
+
+# Remove
+DataCaches.Caches.rm(:taxonomy_backup)
+DataCaches.Caches.rm(:nonexistent; force=true)  # silently ignore if absent
+```
+
+See the [full API reference](https://juliadata.org/DataCaches.jl) for complete
+documentation of each function.
+
+---
 
 ## About
 
