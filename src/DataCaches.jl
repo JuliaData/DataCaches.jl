@@ -27,12 +27,13 @@ export scratch_datacache!
 A reference to a cached dataset in a [`DataCache`](@ref).
 
 Fields are accessed directly:
-- `key.id          :: String`    — unique identifier (UUID)
-- `key.seq         :: Int`       — stable integer index (persisted; use `reindexcache!` to compact gaps)
-- `key.label       :: String`    — lookup key (hash string, or user-provided label; empty if none)
-- `key.path        :: String`    — absolute path to the backing data file
-- `key.description :: String`    — human-readable source expression (empty if none was recorded)
-- `key.datecached  :: DateTime`  — when the entry was written; `typemin(DateTime)` if unknown
+- `key.id            :: String`    — unique identifier (UUID)
+- `key.seq           :: Int`       — stable integer index (persisted; use `reindexcache!` to compact gaps)
+- `key.label         :: String`    — lookup key (hash string, or user-provided label; empty if none)
+- `key.path          :: String`    — absolute path to the backing data file
+- `key.description   :: String`    — human-readable source expression (empty if none was recorded)
+- `key.datecached    :: DateTime`  — when the entry was written; `typemin(DateTime)` if unknown
+- `key.dateaccessed  :: DateTime`  — when the entry was last read; `typemin(DateTime)` if never accessed
 """
 struct CacheKey
     id::String
@@ -41,6 +42,7 @@ struct CacheKey
     path::String
     description::String   # human-readable source expression, or ""
     datecached::DateTime  # timestamp of last write; typemin(DateTime) = unknown (legacy entry)
+    dateaccessed::DateTime # timestamp of last read; typemin(DateTime) = never accessed
 end
 
 function Base.show(io::IO, k::CacheKey)
@@ -74,8 +76,8 @@ end
 # =============================================================================
 
 """
-    DataCache([store::AbstractString])
-    DataCache(key::Symbol)
+    DataCache([store::AbstractString]; track_access=true)
+    DataCache(key::Symbol; track_access=true)
 
 A labeled, file-backed key-value store for caching query results across
 Julia sessions.
@@ -148,6 +150,7 @@ mutable struct DataCache
     _index::Dict{String,CacheKey}    # id → CacheKey
     _by_label::Dict{String,String}   # label → id
     _next_seq::Int                   # monotonically incrementing seq counter
+    track_access::Bool               # record dateaccessed on every read (opt-out with false)
 end
 
 const _INDEX_FILENAME = "cache_index.toml"
@@ -160,17 +163,17 @@ function _default_cache_dir()
     return store
 end
 
-function DataCache(store::AbstractString = _default_cache_dir())
+function DataCache(store::AbstractString = _default_cache_dir(); track_access::Bool = true)
     store = abspath(store)
     mkpath(store)
-    cache = DataCache(store, Dict{String,CacheKey}(), Dict{String,String}(), 1)
+    cache = DataCache(store, Dict{String,CacheKey}(), Dict{String,String}(), 1, track_access)
     _load_index!(cache)
     return cache
 end
 
-function DataCache(key::Symbol)
+function DataCache(key::Symbol; track_access::Bool = true)
     store = joinpath(Caches._user_dir(), string(key))
-    return DataCache(store)
+    return DataCache(store; track_access)
 end
 
 """
@@ -200,10 +203,10 @@ get_cache() = _CACHE[]
 end
 ```
 """
-function scratch_datacache!(pkg_uuid::Base.UUID, key::Symbol = :datacache)
+function scratch_datacache!(pkg_uuid::Base.UUID, key::Symbol = :datacache; track_access::Bool = true)
     store = joinpath(Caches._module_dir(), string(pkg_uuid), string(key))
     mkpath(store)
-    return DataCache(store)
+    return DataCache(store; track_access)
 end
 
 # --- Index I/O ---------------------------------------------------------------
@@ -214,7 +217,7 @@ function _load_index!(cache::DataCache)
     p = _index_file(cache)
     isfile(p) || return
     data = TOML.parsefile(p)
-    legacy = Tuple{String,String,String,String,DateTime}[]  # (id, lbl, fpath, desc, dt) for seq==0
+    legacy = Tuple{String,String,String,String,DateTime,DateTime}[]  # (id, lbl, fpath, desc, dt, da) for seq==0
     max_seq = 0
     for (id, entry) in get(data, "entries", Dict())
         lbl    = get(entry, "label",       "")
@@ -235,20 +238,32 @@ function _load_index!(cache::DataCache)
                  typemin(DateTime)
              end
         isfile(fpath) || continue
+        da_raw = get(entry, "dateaccessed", "")
+        da = if da_raw isa DateTime
+                 da_raw
+             elseif da_raw isa AbstractString && !isempty(da_raw)
+                 try
+                     DateTime(da_raw, dateformat"yyyy-mm-ddTHH:MM:SS")
+                 catch
+                     typemin(DateTime)
+                 end
+             else
+                 typemin(DateTime)
+             end
         if seq == 0
-            push!(legacy, (id, lbl, fpath, desc, dt))
+            push!(legacy, (id, lbl, fpath, desc, dt, da))
         else
             max_seq = max(max_seq, seq)
-            key = CacheKey(id, seq, lbl, fpath, desc, dt)
+            key = CacheKey(id, seq, lbl, fpath, desc, dt, da)
             cache._index[id] = key
             isempty(lbl) || (cache._by_label[lbl] = id)
         end
     end
     # Assign seq to legacy entries (no seq in TOML), ordered by datecached
     sort!(legacy; by = t -> t[5])  # sort by dt
-    for (id, lbl, fpath, desc, dt) in legacy
+    for (id, lbl, fpath, desc, dt, da) in legacy
         max_seq += 1
-        key = CacheKey(id, max_seq, lbl, fpath, desc, dt)
+        key = CacheKey(id, max_seq, lbl, fpath, desc, dt, da)
         cache._index[id] = key
         isempty(lbl) || (cache._by_label[lbl] = id)
     end
@@ -259,12 +274,14 @@ function _save_index(cache::DataCache)
     entries = Dict{String,Any}()
     for (id, key) in cache._index
         entries[id] = Dict{String,Any}(
-            "seq"         => key.seq,
-            "label"       => key.label,
-            "path"        => relpath(key.path, cache.store),
-            "description" => key.description,
-            "datecached"  => key.datecached == typemin(DateTime) ? "" :
-                             Dates.format(key.datecached, "yyyy-mm-ddTHH:MM:SS"),
+            "seq"          => key.seq,
+            "label"        => key.label,
+            "path"         => relpath(key.path, cache.store),
+            "description"  => key.description,
+            "datecached"   => key.datecached == typemin(DateTime) ? "" :
+                              Dates.format(key.datecached, "yyyy-mm-ddTHH:MM:SS"),
+            "dateaccessed" => key.dateaccessed == typemin(DateTime) ? "" :
+                              Dates.format(key.dateaccessed, "yyyy-mm-ddTHH:MM:SS"),
         )
     end
     open(_index_file(cache), "w") do io
@@ -330,7 +347,7 @@ function write!(cache::DataCache, data; label::AbstractString = "", description:
         isnothing(old) || _remove_entry!(cache, old)
         cache._by_label[label] = id
     end
-    key = CacheKey(id, seq, label, fpath, description, Dates.now())
+    key = CacheKey(id, seq, label, fpath, description, Dates.now(), typemin(DateTime))
     cache._index[id] = key
     _save_index(cache)
     return key
@@ -347,7 +364,14 @@ index. The `Integer` form uses the sequence index shown in brackets by `showcach
 """
 function Base.read(cache::DataCache, key::CacheKey)
     isfile(key.path) || error("Cache file missing: $(key.path)")
-    return _read_file(key)
+    data = _read_file(key)
+    if cache.track_access
+        new_key = CacheKey(key.id, key.seq, key.label, key.path, key.description,
+                           key.datecached, Dates.now())
+        cache._index[key.id] = new_key
+        _save_index(cache)
+    end
+    return data
 end
 
 function Base.read(cache::DataCache, lbl::AbstractString)
@@ -474,7 +498,8 @@ function _relabel_by_id!(cache::DataCache, id::String, new_label::AbstractString
         error("Label $(repr(new_label)) is already used by another cache entry")
     end
     isempty(current.label) || delete!(cache._by_label, current.label)
-    new_key = CacheKey(id, current.seq, new_label, current.path, current.description, current.datecached)
+    new_key = CacheKey(id, current.seq, new_label, current.path, current.description,
+                       current.datecached, current.dateaccessed)
     cache._index[id] = new_key
     isempty(new_label) || (cache._by_label[new_label] = id)
     _save_index(cache)
@@ -547,7 +572,8 @@ Use this after many write/delete cycles to keep index numbers manageable.
 function reindexcache!(cache::DataCache)
     sorted = sort(collect(values(cache._index)); by = k -> k.seq)
     for (new_seq, key) in enumerate(sorted)
-        new_key = CacheKey(key.id, new_seq, key.label, key.path, key.description, key.datecached)
+        new_key = CacheKey(key.id, new_seq, key.label, key.path, key.description,
+                           key.datecached, key.dateaccessed)
         cache._index[key.id] = new_key
     end
     cache._next_seq = length(sorted) + 1
@@ -562,6 +588,7 @@ end
 public movecache!
 public importcache!
 public Caches
+public CacheAssets
 
 """
     DataCaches.movecache!(cache::DataCache, new_path::AbstractString) → DataCache
@@ -594,7 +621,7 @@ function movecache!(cache::DataCache, new_path::AbstractString)
     for (id, key) in cache._index
         new_abs = joinpath(dst, relpath(key.path, src))
         cache._index[id] = CacheKey(key.id, key.seq, key.label, new_abs,
-                                    key.description, key.datecached)
+                                    key.description, key.datecached, key.dateaccessed)
     end
     return cache
 end
@@ -1118,6 +1145,7 @@ end
 
 include("Caches.jl")
 Caches._datacache_ctor[] = DataCache
+include("CacheAssets.jl")
 include("_migrate_legacy_defaultcache.jl")
 
 end # module
