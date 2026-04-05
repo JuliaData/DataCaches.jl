@@ -41,13 +41,13 @@ pwd(name::Symbol) = joinpath(_user_dir(), string(name))
 Return the absolute path to the default [`DataCache`](@ref DataCaches.DataCache) store.
 
 Respects the `DATACACHES_DEFAULT_STORE` environment variable; otherwise returns
-the path of the `_GLOBAL` store inside `<root>/caches/user/`.
+the path of the `_DEFAULT` store inside `<root>/caches/user/>`.
 
 Unlike `DataCache()`, this function does not create the directory.
 """
 function defaultstore()
     haskey(ENV, "DATACACHES_DEFAULT_STORE") && return ENV["DATACACHES_DEFAULT_STORE"]
-    return joinpath(_user_dir(), "_GLOBAL")
+    return joinpath(_user_dir(), "_DEFAULT")
 end
 
 """

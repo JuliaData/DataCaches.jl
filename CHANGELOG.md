@@ -34,7 +34,7 @@
 
 - **`migrate_v020_defaultcache(; conflict=:skip)`**: Migrates the default cache from
   its v0.2.0 location (`<depot>/caches/defaultcache/`) to the new user silo location
-  (`<depot>/caches/user/_GLOBAL/`). Same wholesale-move / merge-import semantics as
+  (`<depot>/caches/user/_DEFAULT/`). Same wholesale-move / merge-import semantics as
   `migrate_legacy_defaultcache`. Idempotent — safe to call multiple times.
 
 ### Changed
@@ -52,9 +52,9 @@
   `Depot.ls()` default storetype changed from `:local` to `:user`.
   `Depot._local_dir()` renamed to `Depot._user_dir()` (internal).
 
-- **Default cache relocated to `caches/user/_GLOBAL`**: The no-argument `DataCache()`
-  constructor now stores data at `<depot>/caches/user/_GLOBAL/` instead of
-  `<depot>/caches/defaultcache/`. `DataCache()`, `DataCache(:_GLOBAL)`, and
+- **Default cache relocated to `caches/user/_DEFAULT`**: The no-argument `DataCache()`
+  constructor now stores data at `<depot>/caches/user/_DEFAULT/` instead of
+  `<depot>/caches/defaultcache/`. `DataCache()`, `DataCache(:_DEFAULT)`, and
   `default_filecache()` all resolve to the same store. Existing v0.2.0 users should
   call `migrate_v020_defaultcache()` to transfer cached data to the new location.
 

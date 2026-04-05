@@ -737,10 +737,10 @@ using ZipFile
             end
         end
 
-        @testset "defaultstore() falls back to depot/caches/user/_GLOBAL" begin
+        @testset "defaultstore() falls back to depot/caches/user/_DEFAULT" begin
             withenv("DATACACHES_DEFAULT_STORE" => nothing) do
                 ds = DataCaches.Caches.defaultstore()
-                @test endswith(ds, joinpath("c1455f2b-6d6f-4f37-b463-919f923708a5", "caches", "user", "_GLOBAL"))
+                @test endswith(ds, joinpath("c1455f2b-6d6f-4f37-b463-919f923708a5", "caches", "user", "_DEFAULT"))
             end
         end
 

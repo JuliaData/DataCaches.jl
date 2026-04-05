@@ -172,11 +172,11 @@ using DataCaches, PaleobiologyDB
 # Optional: track caching operations in debug logs
 ENV["JULIA_DEBUG"] = "DataCaches"
 
-# Enable autocaching, using the default global cache
+# Enable autocaching, using the default cache
 set_autocaching!(true)
 
-# If we do not want to rely on the default global cache, 
-# "`:_GLOBAL`", as the above does, we can open a project 
+# If we do not want to rely on the default cache, 
+# "`:_DEFAULT`", as the above does, we can open a project 
 # silo:
 # dc = DataCache(:project1)
 # set_autocaching!(true; cache = dc)

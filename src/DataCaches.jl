@@ -87,10 +87,10 @@ serialized Julia objects (`.jls`) for anything else. An index file
 (`cache_index.toml`) in `store` keeps track of all entries.
 
 **No argument:** the store is placed in the user silo of DataCaches' depot at
-`~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_GLOBAL/`,
+`~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_DEFAULT/`,
 automatically cleaned up if DataCaches.jl is uninstalled and `Pkg.gc()` is run.
 Set the `DATACACHES_DEFAULT_STORE` environment variable to override this location.
-`DataCache()` is equivalent to `DataCache(:_GLOBAL)`.
+`DataCache()` is equivalent to `DataCache(:_DEFAULT)`.
 
 **Symbol argument (`DataCache(:name)`):** creates a named user store within
 DataCaches.jl's own depot directory (`~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/<name>/`).
@@ -120,8 +120,8 @@ frequently or have many entries.
 
 # Examples
 ```julia
-cache = DataCache()                        # default store: caches/user/_GLOBAL/
-cache = DataCache(:_GLOBAL)                # same as DataCache() — the global default
+cache = DataCache()                        # default store: caches/user/_DEFAULT/
+cache = DataCache(:_DEFAULT)                # same as DataCache() — the default store
 cache = DataCache(:myproject)              # named store: caches/user/myproject/
 cache = DataCache("/my/project/cache")     # explicit filesystem path
 cache = DataCache(:logs; track_access = false)  # disable access-time recording
@@ -165,7 +165,7 @@ const _DATACACHES_UUID = Base.UUID("c1455f2b-6d6f-4f37-b463-919f923708a5")
 
 function _default_cache_dir()
     haskey(ENV, "DATACACHES_DEFAULT_STORE") && return ENV["DATACACHES_DEFAULT_STORE"]
-    store = joinpath(Caches._user_dir(), "_GLOBAL")
+    store = joinpath(Caches._user_dir(), "_DEFAULT")
     mkpath(store)
     return store
 end

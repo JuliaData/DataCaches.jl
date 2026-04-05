@@ -102,11 +102,11 @@ Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 There is a gradient from no setup approach to full control.
 In the no-setup approach, we do not explicitly open a cache 
 before running any of the cache operations, and a default
-"`:_GLOBAL`" cache will be used automatically, so this step 
+"`:_DEFAULT`" cache will be used automatically, so this step 
 can be skipped.
 
 The forms create caches that live inside DataCaches.jl's own depot,
-siloed from each other and the default :`:_GLOBAL`".
+siloed from each other and the default :`:_DEFAULT`".
 
 All these caches are automatically deleted if this package is 
 uninstalled and `Pkg.gc()` are run.
@@ -116,9 +116,9 @@ using DataCaches
 
 # The default file cache is the cache that will 
 # be used if we do NOT specify a cache explicitly.  
-# This is identical to calling `DataCache(:_GLOBAL)`
+# This is identical to calling `DataCache(:_DEFAULT)`
 # dc = DataCaches.default_filecache()
-# dc = DataCache(:_GLOBAL)
+# dc = DataCache(:_DEFAULT)
 
 # Named store — still lifecycle-managed, useful 
 # for separating projects specific 
@@ -340,7 +340,7 @@ The scratchspace uses a structured subdirectory layout:
 ~/.julia/scratchspaces/<DataCaches-UUID>/
   caches/
     user/
-      _GLOBAL/             ← DataCache() / DataCache(:_GLOBAL) default store
+      _DEFAULT/             ← DataCache() / DataCache(:_DEFAULT) default store
       <name>/              ← DataCache(:name) stores
     module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
 ```
@@ -350,9 +350,9 @@ using DataCaches
 
 # Inspect the scratchspace
 DataCaches.Caches.pwd()           # → "/home/user/.julia/scratchspaces/c1455f2b-..."
-DataCaches.Caches.defaultstore()  # → ".../c1455f2b-.../caches/user/_GLOBAL"
+DataCaches.Caches.defaultstore()  # → ".../c1455f2b-.../caches/user/_DEFAULT"
 DataCaches.Caches.ls()            # → [:user, :module]                          (caches root — default)
-DataCaches.Caches.ls(:user)       # → [:_GLOBAL, :myproject, :taxonomy, ...]    (user stores)
+DataCaches.Caches.ls(:user)       # → [:_DEFAULT, :myproject, :taxonomy, ...]    (user stores)
 DataCaches.Caches.ls(:module)     # → [Symbol("uuid1/key1"), ...]               (module stores)
 DataCaches.Caches.ls!()           # prints caches root to stdout
 DataCaches.Caches.ls!(:user)      # prints user store names to stdout

@@ -18,7 +18,7 @@ Before DataCaches.jl integrated with Scratch.jl (prior to v0.2.0), the no-argume
 
 After Scratch.jl integration the default moved to the managed scratchspace:
 
-    ~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_GLOBAL/
+    ~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_DEFAULT/
 
 (or the path given by `DATACACHES_DEFAULT_STORE` if that environment variable is set).
 
@@ -86,7 +86,7 @@ In DataCaches.jl v0.2.0, the no-argument `DataCache()` constructor stored data a
 
 In v0.3.0+ the default moved into the user silo:
 
-    <depot>/caches/user/_GLOBAL/
+    <depot>/caches/user/_DEFAULT/
 
 (or the path given by `DATACACHES_DEFAULT_STORE` if that environment variable is set).
 
