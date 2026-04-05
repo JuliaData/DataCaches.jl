@@ -84,13 +84,14 @@ Data is persisted in `store` as CSV files (for `DataFrame` values) or
 serialized Julia objects (`.jls`) for anything else. An index file
 (`cache_index.toml`) in `store` keeps track of all entries.
 
-**No argument:** the store is placed under DataCaches' depot at
-`~/.julia/scratchspaces/<DataCaches-UUID>/caches/defaultcache/`,
+**No argument:** the store is placed in the user silo of DataCaches' depot at
+`~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_GLOBAL/`,
 automatically cleaned up if DataCaches.jl is uninstalled and `Pkg.gc()` is run.
 Set the `DATACACHES_DEFAULT_STORE` environment variable to override this location.
+`DataCache()` is equivalent to `DataCache(:_GLOBAL)`.
 
-**Symbol argument (`DataCache(:name)`):** creates a named local store within
-DataCaches.jl's own depot directory (`~/.julia/scratchspaces/<DataCaches-UUID>/caches/local/<name>/`).
+**Symbol argument (`DataCache(:name)`):** creates a named user store within
+DataCaches.jl's own depot directory (`~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/<name>/`).
 The cache is automatically removed along with DataCaches.jl when the package is uninstalled.
 This is the recommended approach for users and library authors who want a persistent,
 named cache without managing filesystem paths or package UUIDs:
@@ -111,8 +112,9 @@ package's lifecycle rather than DataCaches.jl's.
 
 # Examples
 ```julia
-cache = DataCache()               # default Scratch.jl-backed store
-cache = DataCache(:myproject)     # named store in DataCaches' scratchspace
+cache = DataCache()               # default store: caches/user/_GLOBAL/
+cache = DataCache(:_GLOBAL)       # same as DataCache() — the global default user store
+cache = DataCache(:myproject)     # named store in DataCaches' scratchspace: caches/user/myproject/
 cache = DataCache("/my/project/cache")  # explicit filesystem path
 
 # Write
@@ -153,7 +155,7 @@ const _DATACACHES_UUID = Base.UUID("c1455f2b-6d6f-4f37-b463-919f923708a5")
 
 function _default_cache_dir()
     haskey(ENV, "DATACACHES_DEFAULT_STORE") && return ENV["DATACACHES_DEFAULT_STORE"]
-    store = joinpath(Depot._caches_dir(), "defaultcache")
+    store = joinpath(Depot._user_dir(), "_GLOBAL")
     mkpath(store)
     return store
 end
@@ -167,7 +169,7 @@ function DataCache(store::AbstractString = _default_cache_dir())
 end
 
 function DataCache(key::Symbol)
-    store = joinpath(Depot._local_dir(), string(key))
+    store = joinpath(Depot._user_dir(), string(key))
     return DataCache(store)
 end
 

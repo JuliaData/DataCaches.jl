@@ -11,7 +11,7 @@ end
 const _datacache_ctor = Ref{Any}(nothing)
 
 _caches_dir()      = joinpath(_root(), "caches")
-_local_dir()       = joinpath(_caches_dir(), "local")
+_user_dir()        = joinpath(_caches_dir(), "user")
 _module_dir()      = joinpath(_caches_dir(), "module")
 
 """
@@ -19,21 +19,21 @@ _module_dir()      = joinpath(_caches_dir(), "module")
     DataCaches.Depot.pwd(name::Symbol) → String
 
 Return the absolute path to the DataCaches depot root (no argument), or the path
-to the named local store `name` within the depot (one argument).
+to the named user store `name` within the depot (one argument).
 
 The depot root is the scratchspaces directory managed by Scratch.jl for DataCaches.
-Local stores live under `<depot>/caches/local/` and are created via `DataCache(:name)`.
+User stores live under `<depot>/caches/user/` and are created via `DataCache(:name)`.
 
 The path is returned whether or not the directory currently exists.
 
 # Examples
 ```julia
 DataCaches.Depot.pwd()          # "~/.julia/scratchspaces/c1455f2b-.../
-DataCaches.Depot.pwd(:mydata)   # "~/.julia/scratchspaces/c1455f2b-.../caches/local/mydata"
+DataCaches.Depot.pwd(:mydata)   # "~/.julia/scratchspaces/c1455f2b-.../caches/user/mydata"
 ```
 """
 pwd() = _root()
-pwd(name::Symbol) = joinpath(_local_dir(), string(name))
+pwd(name::Symbol) = joinpath(_user_dir(), string(name))
 
 """
     DataCaches.Depot.defaultstore() → String
@@ -41,36 +41,36 @@ pwd(name::Symbol) = joinpath(_local_dir(), string(name))
 Return the absolute path to the default [`DataCache`](@ref DataCaches.DataCache) store.
 
 Respects the `DATACACHES_DEFAULT_STORE` environment variable; otherwise returns
-the path of the `"defaultcache"` store inside `<depot>/caches/`.
+the path of the `_GLOBAL` store inside `<depot>/caches/user/`.
 
 Unlike `DataCache()`, this function does not create the directory.
 """
 function defaultstore()
     haskey(ENV, "DATACACHES_DEFAULT_STORE") && return ENV["DATACACHES_DEFAULT_STORE"]
-    return joinpath(_caches_dir(), "defaultcache")
+    return joinpath(_user_dir(), "_GLOBAL")
 end
 
 """
-    DataCaches.Depot.ls(storetype::Symbol = :local) → Vector{Symbol}
+    DataCaches.Depot.ls(storetype::Symbol = :user) → Vector{Symbol}
 
 List the names of [`DataCache`](@ref DataCaches.DataCache) stores in the depot.
 
 `storetype` controls which category is listed:
 
-- `:local` (default) — named stores created via `DataCache(:name)`, living under
-  `<depot>/caches/local/`. Returns store names (e.g. `[:myproject, :mydata]`).
+- `:user` (default) — named stores created via `DataCache(:name)`, living under
+  `<depot>/caches/user/`. Returns store names (e.g. `[:myproject, :mydata]`).
 - `:module` — stores created via `scratch_datacache!(uuid, key)`, living under
   `<depot>/caches/module/<uuid>/<key>/`. Returns `Symbol("<uuid>/<key>")` entries.
 - `:root` — raw subdirectory listing of the depot root (legacy flat view).
 
 Returns an empty vector if the relevant directory does not yet exist.
 """
-function ls(storetype::Symbol = :local)
-    if storetype === :local
-        dir = _local_dir()
+function ls(storetype::Symbol = :user)
+    if storetype === :user
+        dir = _user_dir()
         isdir(dir) || return Symbol[]
         result = [Symbol(n) for n in readdir(dir) if isdir(joinpath(dir, n))]
-        @debug "Depot.ls" storetype=:local paths=joinpath.(_local_dir(), string.(result))
+        @debug "Depot.ls" storetype=:user paths=joinpath.(_user_dir(), string.(result))
         return result
     elseif storetype === :module
         dir = _module_dir()
@@ -92,7 +92,7 @@ function ls(storetype::Symbol = :local)
         @debug "Depot.ls" storetype=:root paths=joinpath.(root, string.(result))
         return result
     else
-        error("Unknown storetype $(repr(storetype)); expected :local, :module, or :root")
+        error("Unknown storetype $(repr(storetype)); expected :user, :module, or :root")
     end
 end
 
@@ -121,7 +121,7 @@ end
 
 Move a cache store. Three dispatch forms:
 
-  - `mv(src::Symbol, dst::Symbol)` — rename `src` to `dst` within the local depot stores.
+  - `mv(src::Symbol, dst::Symbol)` — rename `src` to `dst` within the user depot stores.
   - `mv(src::Symbol, dst::AbstractString)` — move named depot cache `src` to filesystem
     path `dst` (export from depot).
   - `mv(src::AbstractString, dst::Symbol)` — move a filesystem directory `src` into
@@ -165,7 +165,7 @@ end
 
 Copy a cache store. Three dispatch forms:
 
-  - `cp(src::Symbol, dst::Symbol)` — copy depot cache `src` to `dst` within the local depot stores.
+  - `cp(src::Symbol, dst::Symbol)` — copy depot cache `src` to `dst` within the user depot stores.
   - `cp(src::Symbol, dst::AbstractString)` — copy named depot cache `src` to filesystem
     path `dst` (export copy from depot).
   - `cp(src::AbstractString, dst::Symbol)` — copy a filesystem directory `src` into

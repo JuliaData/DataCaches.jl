@@ -33,7 +33,25 @@
   of each run, so all depot operations are fully isolated without needing a dedicated
   test-area subdirectory.
 
+### Added
+
+- **`migrate_v020_defaultcache(; conflict=:skip)`**: Migrates the default cache from
+  its v0.2.0 location (`<depot>/caches/defaultcache/`) to the new user silo location
+  (`<depot>/caches/user/_GLOBAL/`). Same wholesale-move / merge-import semantics as
+  `migrate_legacy_defaultcache`. Idempotent — safe to call multiple times.
+
 ### Changed
+
+- **`caches/local/` renamed to `caches/user/`**: Named user stores (`DataCache(:name)`)
+  now live under `<depot>/caches/user/<name>/` instead of `<depot>/caches/local/<name>/`.
+  `Depot.ls()` default storetype changed from `:local` to `:user`.
+  `Depot._local_dir()` renamed to `Depot._user_dir()` (internal).
+
+- **Default cache relocated to `caches/user/_GLOBAL`**: The no-argument `DataCache()`
+  constructor now stores data at `<depot>/caches/user/_GLOBAL/` instead of
+  `<depot>/caches/defaultcache/`. `DataCache()`, `DataCache(:_GLOBAL)`, and
+  `default_filecache()` all resolve to the same store. Existing v0.2.0 users should
+  call `migrate_v020_defaultcache()` to transfer cached data to the new location.
 
 - `autocache` docstring updated to document `package_cache` and the three-level store
   resolution priority (user-explicit → `package_cache` → `default_filecache()`).
@@ -48,7 +66,7 @@
 
 - **Scratch.jl-backed default cache store**: The default `DataCache()` now stores data in the Julia depot scratchspace (`~/.julia/scratchspaces/<UUID>/caches/defaultcache/`) instead of `~/.cache/DataCaches/_DEFAULT/`. Cache data is automatically cleaned up when the package is uninstalled. The storage location can be overridden via the `DATACACHES_DEFAULT_STORE` environment variable.
 
-- **Named local stores** (`DataCache(:symbol)`): Named caches can be created and accessed by symbol, stored under the depot at `~/.julia/scratchspaces/<UUID>/caches/local/<name>/`.
+- **Named local stores** (`DataCache(:symbol)`): Named caches can be created and accessed by symbol, stored under the depot at `~/.julia/scratchspaces/<UUID>/caches/local/<name>/`. (Renamed to "user stores" in v0.3.0 with path `caches/user/<name>/`.)
 
 - **Module-scoped caches** (`scratch_datacache!(uuid, key)`): UUID-namespaced cache stores for use by other packages, providing isolation between modules.
 

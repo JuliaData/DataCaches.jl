@@ -1,6 +1,7 @@
 
-# Temporary migration tests: v0.1.0 → v0.2.0
-# Remove this file and its include() in runtests.jl once v0.1.0 is no longer supported.
+# Migration tests.
+# migrate_legacy_defaultcache : v0.1.0 → v0.2.0  (remove once v0.1.0 unsupported)
+# migrate_v020_defaultcache   : v0.2.0 → v0.3.0+
 
 @testset "migrate_legacy_defaultcache" begin
 
@@ -113,6 +114,161 @@
                     @test DataCaches.migrate_legacy_defaultcache() == true
                     @test DataCaches.migrate_legacy_defaultcache() == false
                 end
+            end
+        end
+    end
+
+end
+
+@testset "migrate_v020_defaultcache" begin
+
+    # All tests redirect DEPOT_PATH so the v0.2.0 legacy path
+    # (<depot>/caches/defaultcache/) is isolated to a temp dir.
+
+    @testset "returns false when v0.2.0 directory absent" begin
+        mktempdir() do fake_depot
+            _orig = copy(Base.DEPOT_PATH)
+            empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
+            try
+                mktempdir() do new_base
+                    withenv("DATACACHES_DEFAULT_STORE" => joinpath(new_base, "store")) do
+                        @test DataCaches.migrate_v020_defaultcache() == false
+                    end
+                end
+            finally
+                empty!(Base.DEPOT_PATH); append!(Base.DEPOT_PATH, _orig)
+            end
+        end
+    end
+
+    @testset "wholesale move when new store does not exist" begin
+        mktempdir() do fake_depot
+            _orig = copy(Base.DEPOT_PATH)
+            empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
+            try
+                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                mkpath(old_path)
+                old_c = DataCache(old_path)
+                write!(old_c, [1, 2, 3]; label = "v020_entry")
+
+                mktempdir() do new_base
+                    new_store = joinpath(new_base, "store")
+                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                        @test DataCaches.migrate_v020_defaultcache() == true
+                        @test !isdir(old_path)
+                        @test isdir(new_store)
+                        c = DataCache(new_store)
+                        @test haskey(c, "v020_entry")
+                        @test read(c, "v020_entry") == [1, 2, 3]
+                    end
+                end
+            finally
+                empty!(Base.DEPOT_PATH); append!(Base.DEPOT_PATH, _orig)
+            end
+        end
+    end
+
+    @testset "merge when new store already exists" begin
+        mktempdir() do fake_depot
+            _orig = copy(Base.DEPOT_PATH)
+            empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
+            try
+                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                mkpath(old_path)
+                old_c = DataCache(old_path)
+                write!(old_c, [1, 2, 3]; label = "v020_entry")
+
+                mktempdir() do new_base
+                    new_store = joinpath(new_base, "store")
+                    existing = DataCache(new_store)
+                    write!(existing, [9, 9]; label = "existing_entry")
+                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                        @test DataCaches.migrate_v020_defaultcache() == true
+                        @test !isdir(old_path)
+                        c = DataCache(new_store)
+                        @test haskey(c, "v020_entry")
+                        @test haskey(c, "existing_entry")
+                        @test read(c, "v020_entry") == [1, 2, 3]
+                        @test read(c, "existing_entry") == [9, 9]
+                    end
+                end
+            finally
+                empty!(Base.DEPOT_PATH); append!(Base.DEPOT_PATH, _orig)
+            end
+        end
+    end
+
+    @testset "conflict=:skip preserves new store entry on collision" begin
+        mktempdir() do fake_depot
+            _orig = copy(Base.DEPOT_PATH)
+            empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
+            try
+                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                mkpath(old_path)
+                old_c = DataCache(old_path)
+                write!(old_c, [1, 1]; label = "shared")
+
+                mktempdir() do new_base
+                    new_store = joinpath(new_base, "store")
+                    new_c = DataCache(new_store)
+                    write!(new_c, [9, 9]; label = "shared")
+                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                        DataCaches.migrate_v020_defaultcache(; conflict = :skip)
+                        c = DataCache(new_store)
+                        @test read(c, "shared") == [9, 9]  # new store wins
+                    end
+                end
+            finally
+                empty!(Base.DEPOT_PATH); append!(Base.DEPOT_PATH, _orig)
+            end
+        end
+    end
+
+    @testset "conflict=:overwrite replaces new store entry on collision" begin
+        mktempdir() do fake_depot
+            _orig = copy(Base.DEPOT_PATH)
+            empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
+            try
+                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                mkpath(old_path)
+                old_c = DataCache(old_path)
+                write!(old_c, [1, 1]; label = "shared")
+
+                mktempdir() do new_base
+                    new_store = joinpath(new_base, "store")
+                    new_c = DataCache(new_store)
+                    write!(new_c, [9, 9]; label = "shared")
+                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                        DataCaches.migrate_v020_defaultcache(; conflict = :overwrite)
+                        c = DataCache(new_store)
+                        @test read(c, "shared") == [1, 1]  # v0.2.0 data wins
+                    end
+                end
+            finally
+                empty!(Base.DEPOT_PATH); append!(Base.DEPOT_PATH, _orig)
+            end
+        end
+    end
+
+    @testset "idempotent — second call returns false" begin
+        mktempdir() do fake_depot
+            _orig = copy(Base.DEPOT_PATH)
+            empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
+            try
+                old_path = joinpath(DataCaches.Depot._caches_dir(), "defaultcache")
+                mkpath(old_path)
+                old_c = DataCache(old_path)
+                write!(old_c, [7, 8, 9]; label = "idem_entry")
+
+                mktempdir() do new_base
+                    new_store = joinpath(new_base, "store")
+                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                        @test DataCaches.migrate_v020_defaultcache() == true
+                        @test DataCaches.migrate_v020_defaultcache() == false
+                    end
+                end
+            finally
+                empty!(Base.DEPOT_PATH); append!(Base.DEPOT_PATH, _orig)
             end
         end
     end

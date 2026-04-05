@@ -410,7 +410,7 @@ using ZipFile
             @test c isa DataCache
             @test isdir(c.store)
             @test startswith(c.store, joinpath(depot_scratch, datacaches_uuid))
-            @test occursin(joinpath("caches", "local"), c.store)
+            @test occursin(joinpath("caches", "user"), c.store)
             @test endswith(c.store, "test_named_store")
         end
 
@@ -653,7 +653,7 @@ using ZipFile
         @testset "pwd(::Symbol) returns named store path inside depot" begin
             root = DataCaches.Depot.pwd()
             named = DataCaches.Depot.pwd(:mytest)
-            @test named == joinpath(root, "caches", "local", "mytest")
+            @test named == joinpath(root, "caches", "user", "mytest")
         end
 
         @testset "defaultstore() respects DATACACHES_DEFAULT_STORE env var" begin
@@ -664,10 +664,10 @@ using ZipFile
             end
         end
 
-        @testset "defaultstore() falls back to depot/caches/defaultcache" begin
+        @testset "defaultstore() falls back to depot/caches/user/_GLOBAL" begin
             withenv("DATACACHES_DEFAULT_STORE" => nothing) do
                 ds = DataCaches.Depot.defaultstore()
-                @test endswith(ds, joinpath("c1455f2b-6d6f-4f37-b463-919f923708a5", "caches", "defaultcache"))
+                @test endswith(ds, joinpath("c1455f2b-6d6f-4f37-b463-919f923708a5", "caches", "user", "_GLOBAL"))
             end
         end
 

@@ -517,11 +517,11 @@ See [`test/README.md`](test/README.md) for more options.
 |---|---|---|
 | `DATACACHES_DEFAULT_STORE` | See below | Override the default store used by `DataCache()` (no-argument constructor) |
 
-When `DATACACHES_DEFAULT_STORE` is not set, the no-argument `DataCache()` constructor stores its data inside the DataCaches depot at `~/.julia/scratchspaces/<DataCaches-UUID>/caches/defaultcache/`. The default cache is automatically removed if DataCaches.jl is ever uninstalled and `Pkg.gc()` is run.
+When `DATACACHES_DEFAULT_STORE` is not set, the no-argument `DataCache()` constructor stores its data inside the DataCaches depot at `~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_GLOBAL/`. This is equivalent to `DataCache(:_GLOBAL)`. The default cache is automatically removed if DataCaches.jl is ever uninstalled and `Pkg.gc()` is run.
 
 ## Named depot caches
 
-Pass a `Symbol` to `DataCache` to create a named local cache inside DataCaches.jl's
+Pass a `Symbol` to `DataCache` to create a named user cache inside DataCaches.jl's
 own depot directory. No path management or UUIDs required, and the cache is
 automatically removed if DataCaches.jl is uninstalled:
 
@@ -529,7 +529,7 @@ automatically removed if DataCaches.jl is uninstalled:
 dc = DataCache(:myproject)
 ```
 
-The store lives at `~/.julia/scratchspaces/<DataCaches-UUID>/caches/local/myproject/`.
+The store lives at `~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/myproject/`.
 Multiple independent stores are created by using different symbols:
 
 ```julia
@@ -559,8 +559,9 @@ The depot uses a structured subdirectory layout:
 ```
 ~/.julia/scratchspaces/<DataCaches-UUID>/
   caches/
-    defaultcache/          ← DataCache() default store
-    local/<name>/          ← DataCache(:name) stores
+    user/
+      _GLOBAL/             ← DataCache() / DataCache(:_GLOBAL) default store
+      <name>/              ← DataCache(:name) stores
     module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
 ```
 
@@ -569,8 +570,8 @@ using DataCaches
 
 # Inspect the depot
 DataCaches.Depot.pwd()           # → "/home/user/.julia/scratchspaces/c1455f2b-..."
-DataCaches.Depot.defaultstore()  # → ".../c1455f2b-.../caches/defaultcache"
-DataCaches.Depot.ls()            # → [:myproject, :taxonomy, ...]             (local stores)
+DataCaches.Depot.defaultstore()  # → ".../c1455f2b-.../caches/user/_GLOBAL"
+DataCaches.Depot.ls()            # → [:_GLOBAL, :myproject, :taxonomy, ...]    (user stores)
 DataCaches.Depot.ls(:module)     # → [Symbol("uuid1/key1"), ...]               (module stores)
 DataCaches.Depot.ls(:root)       # → [:caches]                                  (raw depot root)
 
