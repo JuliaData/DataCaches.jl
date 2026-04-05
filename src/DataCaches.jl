@@ -112,12 +112,19 @@ end
 Use [`scratch_datacache!`](@ref) instead when you need the cache tied to *your own*
 package's lifecycle rather than DataCaches.jl's.
 
+**`track_access` keyword:** when `true` (the default), every `read` updates the
+`dateaccessed` field of the corresponding [`CacheKey`](@ref) and rewrites the
+index. This supports LRU inspection via [`DataCaches.CacheAssets.ls`](@ref).
+Set `track_access = false` to skip this rewrite on caches that are read very
+frequently or have many entries.
+
 # Examples
 ```julia
-cache = DataCache()               # default store: caches/user/_GLOBAL/
-cache = DataCache(:_GLOBAL)       # same as DataCache() — the global default user store
-cache = DataCache(:myproject)     # named store in DataCaches' scratchspace: caches/user/myproject/
-cache = DataCache("/my/project/cache")  # explicit filesystem path
+cache = DataCache()                        # default store: caches/user/_GLOBAL/
+cache = DataCache(:_GLOBAL)                # same as DataCache() — the global default
+cache = DataCache(:myproject)              # named store: caches/user/myproject/
+cache = DataCache("/my/project/cache")     # explicit filesystem path
+cache = DataCache(:logs; track_access = false)  # disable access-time recording
 
 # Write
 key = write!(cache, df)

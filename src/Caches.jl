@@ -53,16 +53,16 @@ end
 """
     DataCaches.Caches.ls(storetype::Symbol = :root) → Vector{Symbol}
 
-List the names of stores in the DataCaches scratchspace.
+List the names of store categories or stores in the DataCaches cache directory.
 
 `storetype` controls which category is listed:
 
-- `:root` (default) — raw subdirectory listing of the scratchspace root
-  (e.g. `[:caches]`).
+- `:root` (default) — subdirectory listing of the caches root directory
+  (e.g. `[:user, :module]`).
 - `:user` — named stores created via `DataCache(:name)`, living under
-  `<root>/caches/user/`. Returns store names (e.g. `[:myproject, :mydata]`).
+  `<caches>/user/`. Returns store names (e.g. `[:myproject, :mydata]`).
 - `:module` — stores created via `scratch_datacache!(uuid, key)`, living under
-  `<root>/caches/module/<uuid>/<key>/`. Returns `Symbol("<uuid>/<key>")` entries.
+  `<caches>/module/<uuid>/<key>/`. Returns `Symbol("<uuid>/<key>")` entries.
 
 Returns an empty vector if the relevant directory does not yet exist.
 """
@@ -87,10 +87,10 @@ function ls(storetype::Symbol = :root)
         @debug "Caches.ls" storetype=:module count=length(result)
         return result
     elseif storetype === :root
-        root = _root()
-        isdir(root) || return Symbol[]
-        result = [Symbol(n) for n in readdir(root) if isdir(joinpath(root, n))]
-        @debug "Caches.ls" storetype=:root paths=joinpath.(root, string.(result))
+        dir = _caches_dir()
+        isdir(dir) || return Symbol[]
+        result = [Symbol(n) for n in readdir(dir) if isdir(joinpath(dir, n))]
+        @debug "Caches.ls" storetype=:root paths=joinpath.(dir, string.(result))
         return result
     else
         error("Unknown storetype $(repr(storetype)); expected :root, :user, or :module")

@@ -571,7 +571,7 @@ using DataCaches
 # Inspect the scratchspace
 DataCaches.Caches.pwd()           # → "/home/user/.julia/scratchspaces/c1455f2b-..."
 DataCaches.Caches.defaultstore()  # → ".../c1455f2b-.../caches/user/_GLOBAL"
-DataCaches.Caches.ls()            # → [:caches]                                  (raw root — default)
+DataCaches.Caches.ls()            # → [:user, :module]                          (caches root — default)
 DataCaches.Caches.ls(:user)       # → [:_GLOBAL, :myproject, :taxonomy, ...]    (user stores)
 DataCaches.Caches.ls(:module)     # → [Symbol("uuid1/key1"), ...]               (module stores)
 
@@ -597,6 +597,68 @@ DataCaches.Caches.rm(:nonexistent; force=true)  # silently ignore if absent
 
 See the [full API reference](https://juliadata.org/DataCaches.jl) for complete
 documentation of each function.
+
+---
+
+## CacheAssets — managing assets within a cache
+
+`DataCaches.CacheAssets` is a submodule that provides a filesystem-style interface
+for inspecting and managing individual *entries* within a `DataCache`. It is public
+but not exported; use `using DataCaches.CacheAssets` to bring it into scope.
+
+All functions accept an optional leading `DataCache` argument. When omitted,
+`default_filecache()` is used.
+
+```julia
+using DataCaches
+using DataCaches.CacheAssets
+
+dc = DataCache(:myproject)
+
+# --- List ---
+CacheAssets.ls(dc)                                 # normal detail: seq, timestamp, label, path
+CacheAssets.ls(dc; detail = :minimal)              # seq + label only
+CacheAssets.ls(dc; detail = :full)                 # + access time, file size, format
+CacheAssets.ls(dc; pattern = r"canidae")           # filter by label/description
+CacheAssets.ls(dc; sortby = :dateaccessed_desc)    # LRU: oldest access first
+CacheAssets.ls(dc; sortby = :size_desc)            # largest first
+CacheAssets.ls(dc; after = DateTime("2026-01-01T00:00:00"), labeled = true)
+
+# --- Remove ---
+CacheAssets.rm(dc, "old_label")                    # by label
+CacheAssets.rm(dc, 2)                              # by sequence index
+CacheAssets.rm(dc, "label1", "label2", 5)          # multiple assets, single index rewrite
+
+# --- Relabel within a cache ---
+CacheAssets.mv(dc, "old_label", "new_label")
+CacheAssets.mv(dc, 3, "new_label")                 # by sequence index
+
+# --- Move to another cache ---
+dc2 = DataCache(:archive)
+CacheAssets.mv(dc, "canidae_occs", dc2)
+CacheAssets.mv(dc, "canidae_occs", dc2; label = "canidae_archived")
+
+# --- Copy to another cache ---
+CacheAssets.cp(dc, "canidae_occs", dc2)
+CacheAssets.cp(dc, ["canidae_occs", "dino_taxa"], dc2)   # multiple assets
+
+# --- Default cache (omit the DataCache argument) ---
+CacheAssets.ls()
+CacheAssets.rm("stale_entry")
+CacheAssets.mv("old", "new")
+```
+
+### Access-time tracking
+
+By default, every `read` updates the `dateaccessed` timestamp on each entry's
+[`CacheKey`](@ref), enabling LRU inspection and future pruning. This requires
+rewriting the cache index on every read. For caches that are read very frequently
+or that contain many entries, opt out by constructing the cache with
+`track_access = false`:
+
+```julia
+dc = DataCache(:high_frequency; track_access = false)
+```
 
 ---
 

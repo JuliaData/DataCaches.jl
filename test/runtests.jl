@@ -671,12 +671,12 @@ using ZipFile
             end
         end
 
-        @testset "ls() returns root subdirs by default" begin
-            # Create a named store so the scratchspace root exists
+        @testset "ls() returns caches-dir subdirs by default" begin
+            # Create a named store so the caches directory exists
             _ = DataCache(:_caches_ls_test_store)
             names = DataCaches.Caches.ls()
             @test names isa Vector{Symbol}
-            @test :caches in names  # ls() defaults to :root — returns top-level dirs
+            @test :user in names  # ls() defaults to :root — returns caches/ subdirectories
         end
 
         @testset "ls(:user) returns names of existing user stores" begin
