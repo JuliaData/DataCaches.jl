@@ -100,33 +100,65 @@ Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 ### Cache setup approaches
 
 There is a gradient from no setup approach to full control.
+
+#### The "No-setup" setup: the default cache
+
 In the no-setup approach, we do not explicitly open a cache 
 before running any of the cache operations, and a default
 "`:_DEFAULT`" cache will be used automatically, so this step 
 can be skipped.
 
-The forms create caches that live inside DataCaches.jl's own depot,
+ The default file cache is the cache that will be used if we do 
+ NOT specify a cache explicitly is given by
+ 
+```julia
+using DataCaches
+dc = DataCaches.default_filecache()
+```
+
+The default cache path will be located in the `DataCaches` module-scoped scratchspace in the Julia depot directory, 
+
+```
+/home/username/.julia/scratchspaces/c1455f2b-6d6f-4f37-b463-919f923708a5/caches/user/_DEFAULT
+```
+
+and is equivalent to the user creating a cache named "`:_DEFAULT`" using public cache creation mechanics:
+
+```julia
+dc = DataCache(:_DEFAULT)
+```
+
+#### A named cache in the `DataCaches` scratchspace depot
+
+This approach create caches that live inside DataCaches.jl's own depot,
 siloed from each other and the default :`:_DEFAULT`".
 
 All these caches are automatically deleted if this package is 
 uninstalled and `Pkg.gc()` are run.
 
+Individual users can name individual caches:
+
 ```julia
 using DataCaches
 
-# The default file cache is the cache that will 
-# be used if we do NOT specify a cache explicitly.  
-# This is identical to calling `DataCache(:_DEFAULT)`
-# dc = DataCaches.default_filecache()
-# dc = DataCache(:_DEFAULT)
-
-# Named store — still lifecycle-managed, useful 
 # for separating projects specific 
 dc = DataCache(:project123)
-
-# Module-scoped — for package authors; namespaced by UUID
-dc = DataCaches.scratch_datacache!(MyPackage_UUID, :results)
+# store: /home/username/.julia/scratchspaces/c1455f2b-6d6f-4f37-b463-919f923708a5/caches/user/project123
+dc = DataCache(:gbifdata)
+# store: /home/username/.julia/scratchspaces/c1455f2b-6d6f-4f37-b463-919f923708a5/caches/user/gbifdata
+dc = DataCache(:mcmcruns)
+# store: /home/username/.julia/scratchspaces/c1455f2b-6d6f-4f37-b463-919f923708a5/caches/user/mcmcruns
 ```
+
+Package authors (or users) can have module-space specific silos:
+
+```julia
+using DataCaches
+dc = DataCaches.scratch_datacache!(MyPackage_UUID, :rasterdata)
+# store: /home/username/.julia/scratchspaces/c1455f2b-6d6f-4f37-b463-919f923708a5/caches/module/<MyPackage_UUID>/rasterdata
+```
+
+#### A cache in an arbitrary filesystem path
 
 To locate a cache outside of this package's scratchspace depot, 
 for easier or customized file-system management, or for cache 
@@ -135,11 +167,12 @@ any writeable path as a string.
 
 ```julia
 using DataCaches
-
 # Explicit path, for a cache open to 
 # non-hidden file-system views.
-dc = DataCache("path/to/cache")
+dc = DataCache(joinpath(homedir(), "shared", "data", "downloads"))
+dc = DataCache("/tmp/workshop/data"))
 ```
+
 
 ### Caching approaches
 
