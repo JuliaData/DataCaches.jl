@@ -28,7 +28,7 @@ using TOML
 
     @testset "Arbitrary values → OpaqueSerializer" begin
         @test DataCaches.serializer_for([1, 2, 3])      isa DataCaches.OpaqueSerializer
-        @test DataCaches.serializer_for(Dict("a" => 1)) isa DataCaches.OpaqueSerializer
+        @test DataCaches.serializer_for(Dict("a" => 1)) isa DataCaches.OpaqueSerializer  # Dict excluded despite Tables trait
         @test DataCaches.serializer_for(42)              isa DataCaches.OpaqueSerializer
         @test DataCaches.serializer_for("hello")         isa DataCaches.OpaqueSerializer
     end
@@ -188,9 +188,20 @@ end
     @testset "Opaque arbitrary value (JLS)" begin
         mktempdir() do dir
             c = DataCache(dir)
-            val = Dict("key" => [1, 2, 3])
+            val = Set([1, 2, 3])  # Set is not Tables-compatible
             write!(c, val; label="opaque")
             result = Base.read(c, "opaque")
+            @test result == val
+            @test endswith(only(values(c._index)).path, ".jls")
+        end
+    end
+
+    @testset "Dict is OpaqueSerializer (excluded from Tables dispatch)" begin
+        mktempdir() do dir
+            c = DataCache(dir)
+            val = Dict("key" => [1, 2, 3])
+            write!(c, val; label="dict_opaque")
+            result = Base.read(c, "dict_opaque")
             @test result == val
             @test endswith(only(values(c._index)).path, ".jls")
         end
@@ -226,27 +237,24 @@ end
 
 end
 
+# struct definitions must be at top level in Julia, not inside @testset blocks
+struct _TestTextSerializer <: DataCaches.CacheSerializer end
+DataCaches.format_tag(::_TestTextSerializer)        = "txt"
+DataCaches.file_extension(::_TestTextSerializer)    = ".txt"
+DataCaches.write_data(::_TestTextSerializer, p, v)  = Base.write(p, string(v))
+DataCaches.read_data(::_TestTextSerializer, p)       = Base.read(p, String)
+
 @testset "register_serializer! — custom serializer roundtrip" begin
+    DataCaches.register_serializer!("txt", _TestTextSerializer())
     mktempdir() do dir
         c = DataCache(dir)
-
-        # Minimal custom serializer: store a String as plain text
-        struct _TestTextSerializer <: DataCaches.CacheSerializer end
-        DataCaches.format_tag(::_TestTextSerializer)            = "txt"
-        DataCaches.file_extension(::_TestTextSerializer)        = ".txt"
-        DataCaches.write_data(::_TestTextSerializer, p, v)      = Base.write(p, string(v))
-        DataCaches.read_data(::_TestTextSerializer, p)          = Base.read(p, String)
-
-        DataCaches.register_serializer!("txt", _TestTextSerializer())
-
         key = write!(c, "hello world"; label="custom", format="txt")
         @test key.format == "txt"
         @test endswith(key.path, ".txt")
         result = Base.read(c, "custom")
         @test result == "hello world"
-
-        delete!(DataCaches.SERIALIZER_REGISTRY, "txt")
     end
+    delete!(DataCaches.SERIALIZER_REGISTRY, "txt")
 end
 
 @testset "@filecache format dispatch" begin

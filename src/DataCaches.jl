@@ -63,7 +63,13 @@ file_extension(::JSONSerializer) = ".json"
 write_data(::JSONSerializer, fpath::String, data) =
     open(io -> JSON3.write(io, data), fpath, "w")
 read_data(::JSONSerializer, fpath::String) =
-    open(io -> JSON3.read(io, NamedTuple), fpath, "r")
+    _json_obj_to_namedtuple(open(JSON3.read, fpath, "r"))
+
+# Recursively convert JSON3.Object → NamedTuple so nested structures round-trip cleanly.
+_json_obj_to_namedtuple(v::JSON3.Object) =
+    NamedTuple{Tuple(Symbol.(keys(v)))}((_json_obj_to_namedtuple(val) for val in values(v)))
+_json_obj_to_namedtuple(v::JSON3.Array) = [_json_obj_to_namedtuple(x) for x in v]
+_json_obj_to_namedtuple(v) = v
 
 # --- Read-side registry ------------------------------------------------------
 
@@ -106,6 +112,8 @@ Built-in dispatch priority (most to least specific):
 4. Everything else → `OpaqueSerializer` (Julia binary `.jls`)
 """
 function serializer_for(data)
+    # AbstractDict implements the Tables interface but is better treated as opaque
+    data isa AbstractDict && return OpaqueSerializer()
     Tables.istable(typeof(data)) && return CSVSerializer()
     return OpaqueSerializer()
 end

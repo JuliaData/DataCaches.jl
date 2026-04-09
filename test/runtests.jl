@@ -928,7 +928,7 @@ using ZipFile
             @test e isa CacheEntry
             @test e isa CacheKey
             # Constructing with the alias name still works
-            e2 = CacheKey(e.id, e.seq, e.label, e.path, e.description,
+            e2 = CacheKey(e.id, e.seq, e.label, e.path, e.format, e.description,
                           e.datecached, e.dateaccessed)
             @test e2 == e
         end
