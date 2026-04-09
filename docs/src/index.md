@@ -20,7 +20,6 @@ a dedicated format:
 |-----------|--------|------|----------------|
 | `DataFrame`, Tables.jl-compatible | CSV | `.csv` | Yes |
 | `NamedTuple` | JSON | `.json` | Yes (JSON-primitive values) |
-| Images (`Matrix{<:Colorant}`, requires FileIO) | PNG/JPG/TIF | `.png` etc. | Yes |
 | Anything else | Julia serialization | `.jls` | No |
 
 The format used is recorded per entry in the cache index so the correct

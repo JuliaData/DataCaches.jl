@@ -323,7 +323,6 @@ type at write time. No configuration is needed for the common cases:
 |-----------|--------|------|----------------|
 | `DataFrame`, Tables.jl-compatible | CSV | `.csv` | Yes |
 | `NamedTuple` | JSON | `.json` | Yes (JSON-primitive values) |
-| Images (`Matrix{<:Colorant}`, requires FileIO) | PNG/JPG/TIF | `.png` etc. | Yes |
 | Anything else | Julia serialization | `.jls` | No |
 
 The format tag is persisted to the cache index so reads always use the correct
@@ -332,8 +331,7 @@ deserializer, independent of Julia version.
 To override the automatic selection for a specific entry, pass `format=` to `write!`:
 
 ```julia
-write!(cache, img; label = "my_plot", format = "png")   # explicit PNG
-write!(cache, df;  label = "backup",  format = "jls")   # force opaque serialization
+write!(cache, df; label = "backup", format = "jls")   # force opaque serialization
 ```
 
 ### NamedTuple JSON contract
@@ -342,35 +340,6 @@ write!(cache, df;  label = "backup",  format = "jls")   # force opaque serializa
 types (Int, Float64, String, Bool, arrays of same, nested NamedTuples). Note that
 `Float32` and `Float16` values widen to `Float64` on read — this is a documented
 property of the JSON format, not a bug.
-
-### Image-returning functions and FileIO
-
-If your instrumented functions return image data (e.g. `Matrix{RGB{N0f8}}`),
-transparent PNG/JPG/TIF storage requires both **FileIO** and **ColorTypes** (or a
-package that brings them in, such as **Images**) to be loaded in the session.
-
-**For library authors:** if your package loads or produces images, list **FileIO**
-as a dependency in your `Project.toml`. Any user of your package will then have
-FileIO loaded transitively, and DataCaches will store image results as `.png`
-automatically — no extra steps needed by the user.
-
-```toml
-# YourPackage/Project.toml
-[deps]
-DataCaches = "c1455f2b-6d6f-4f37-b463-919f923708a5"
-FileIO     = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
-ColorTypes = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"   # or Images, which brings both
-```
-
-If FileIO is not a dependency of your package and the user has not loaded it
-themselves, DataCaches will raise a clear error at write time if it attempts to
-store an image entry, explaining what needs to be added.
-
-If you need JPG or TIF instead of the PNG default, pass `format=` explicitly:
-
-```julia
-write!(cache, img; label = "photo", format = "jpg")
-```
 
 ---
 

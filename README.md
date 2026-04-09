@@ -17,12 +17,11 @@ dedicated format:
 |-----------|--------|------|----------------|
 | `DataFrame`, Tables.jl-compatible | CSV | `.csv` | Yes |
 | `NamedTuple` | JSON | `.json` | Yes (JSON-primitive values) |
-| Images (`Matrix{<:Colorant}`, requires FileIO) | PNG/JPG/TIF | `.png` etc. | Yes |
 | Anything else | Julia serialization | `.jls` | No |
 
 The storage format is recorded per entry so the correct deserializer is always used on
 read, regardless of the Julia version. Custom serializers can be registered for
-additional types.
+additional types via `DataCaches.register_serializer!`.
 
 
 Three levels of caching are provided, from lightest-weight to most manual:
