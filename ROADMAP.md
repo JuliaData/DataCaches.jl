@@ -14,8 +14,10 @@ That is enough for development, but not enough for a mature caching package. 1.0
 TTL / max-age
 stale-while-revalidate or at least stale detection
 invalidate by label/pattern/predicate
-invalidate all entries for a function/endpoint
-optional “refresh if older than X”
+invalidate all entries for a function/endpoint/path pattern
+"refresh if older than X"
+"delete if not visited for more than X days"
+"delete based on: path pattern, label pattern, etc."
 
 
 ### Atomic writes and corruption resistance
