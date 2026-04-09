@@ -1257,7 +1257,7 @@ e = entry("dinosaurs")       # default cache, by label
 e = entry(2)                 # default cache, by index
 ```
 
-See also: [`entries`](@ref), [`write!`](@ref), [`haskey`](@ref).
+See also: [`entries`](@ref), [`write!`](@ref)
 """
 function entry(cache::DataCache, label::AbstractString)
     id = get(cache._by_label, label, nothing)
