@@ -12,6 +12,21 @@ A lightweight, file-backed key-value cache for Julia workflows that make
 frequent expensive function calls (remote API queries, long-running
 computations) and need results available across Julia sessions.
 
+DataCaches selects a transparent, inspectable storage format automatically based
+on the data type, falling back to Julia's binary serialization for types without
+a dedicated format:
+
+| Data type | Format | File | Version-stable? |
+|-----------|--------|------|----------------|
+| `DataFrame`, Tables.jl-compatible | CSV | `.csv` | Yes |
+| `NamedTuple` | JSON | `.json` | Yes (JSON-primitive values) |
+| Images (`Matrix{<:Colorant}`, requires FileIO) | PNG/JPG/TIF | `.png` etc. | Yes |
+| Anything else | Julia serialization | `.jls` | No |
+
+The format used is recorded per entry in the cache index so the correct
+deserializer is always selected on read. Custom serializers can be registered
+for additional types via [`register_serializer!`](@ref).
+
 Three levels of caching are provided, from lightest-weight to most manual:
 
 | Level     | Mechanism              | Persistence      | Works with any function?  |

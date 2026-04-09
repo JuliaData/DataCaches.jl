@@ -72,7 +72,7 @@ function _ls_print(io::IO, entries::Vector{CacheEntry}, sizes::Dict{String,Int},
         elseif detail == :full
             sz    = get(sizes, k.id, -1)
             sz_str = sz >= 0 ? _fmt_size(sz) : "???"
-            type_tag = endswith(k.path, ".csv") ? "DataFrame/CSV" : "Julia/JLS"
+            type_tag = uppercase(k.format)
             println(io, "  [$(seq_str)]  $(_dt_str(k.datecached))  $(k.id[1:8])  $(label_str)$(miss_tag)")
             da_str = k.dateaccessed == typemin(Dates.DateTime) ? "(never)" :
                      Dates.format(k.dateaccessed, "yyyy-mm-ddTHH:MM:SS")
@@ -330,7 +330,7 @@ function mv(cache::DataCache, src, dest::AbstractString; force::Bool = false)
         _remove_entry!(cache, existing_id)
     end
     isempty(key.label) || delete!(cache._by_label, key.label)
-    new_key = CacheEntry(key.id, key.seq, dest, key.path, key.description,
+    new_key = CacheEntry(key.id, key.seq, dest, key.path, key.format, key.description,
                         key.datecached, key.dateaccessed)
     cache._index[key.id] = new_key
     isempty(dest) || (cache._by_label[dest] = key.id)

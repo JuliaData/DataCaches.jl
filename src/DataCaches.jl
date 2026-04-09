@@ -4,8 +4,10 @@ using CSV
 using DataFrames
 using Dates
 using Downloads
+using JSON3
 import TOML
 using Serialization
+using Tables
 using UUIDs
 using ZipFile
 
@@ -17,6 +19,106 @@ export default_filecache, set_default_filecache!, memcache_clear!
 export set_autocaching!
 export autocache
 export scratch_datacache!
+export register_serializer!
+
+# =============================================================================
+# Serializer abstraction
+# =============================================================================
+
+"""
+    CacheSerializer
+
+Abstract type for cache serialization backends. Implement four methods to define
+a new serializer:
+
+- `format_tag(s)::String` — short tag stored in the TOML index (e.g. `"csv"`, `"json"`)
+- `file_extension(s)::String` — file extension including dot (e.g. `".csv"`)
+- `write_data(s, fpath::String, data)` — write `data` to `fpath`
+- `read_data(s, fpath::String)` — read and return data from `fpath`
+
+Register a new serializer with [`register_serializer!`](@ref) so it is available
+for reading entries by format tag.
+"""
+abstract type CacheSerializer end
+
+# --- Built-in serializers ----------------------------------------------------
+
+struct OpaqueSerializer <: CacheSerializer end
+format_tag(::OpaqueSerializer)      = "jls"
+file_extension(::OpaqueSerializer)  = ".jls"
+write_data(::OpaqueSerializer, fpath::String, data) =
+    open(io -> serialize(io, data), fpath, "w")
+read_data(::OpaqueSerializer, fpath::String) = open(deserialize, fpath)
+
+struct CSVSerializer <: CacheSerializer end
+format_tag(::CSVSerializer)     = "csv"
+file_extension(::CSVSerializer) = ".csv"
+write_data(::CSVSerializer, fpath::String, data) = CSV.write(fpath, data)
+read_data(::CSVSerializer, fpath::String) =
+    DataFrame(CSV.File(fpath; normalizenames = true))
+
+struct JSONSerializer <: CacheSerializer end
+format_tag(::JSONSerializer)     = "json"
+file_extension(::JSONSerializer) = ".json"
+write_data(::JSONSerializer, fpath::String, data) =
+    open(io -> JSON3.write(io, data), fpath, "w")
+read_data(::JSONSerializer, fpath::String) =
+    open(io -> JSON3.read(io, NamedTuple), fpath, "r")
+
+# --- Read-side registry ------------------------------------------------------
+
+"""
+    SERIALIZER_REGISTRY
+
+Dict mapping format tags to `CacheSerializer` instances used for reading.
+Populated at module load with built-in serializers; extensions add entries
+via [`register_serializer!`](@ref).
+"""
+const SERIALIZER_REGISTRY = Dict{String, CacheSerializer}(
+    "csv"  => CSVSerializer(),
+    "jls"  => OpaqueSerializer(),
+    "json" => JSONSerializer(),
+)
+
+"""
+    register_serializer!(tag::String, s::CacheSerializer)
+
+Add or replace a serializer in the registry. After registration, cache entries
+with `format == tag` will be read using `s`. Called automatically by package
+extensions (e.g. FileIOExt for PNG/JPG support).
+"""
+register_serializer!(tag::String, s::CacheSerializer) = (SERIALIZER_REGISTRY[tag] = s)
+
+# --- Write-side dispatch ------------------------------------------------------
+
+"""
+    serializer_for(data) -> CacheSerializer
+
+Infer the appropriate serializer for `data`. Add methods to this function to
+support new types:
+
+    DataCaches.serializer_for(data::MyType) = MySerializer()
+
+Built-in dispatch priority (most to least specific):
+1. `NamedTuple` → `JSONSerializer`
+2. `AbstractDataFrame` → `CSVSerializer`
+3. Any Tables.jl-compatible type → `CSVSerializer`
+4. Everything else → `OpaqueSerializer` (Julia binary `.jls`)
+"""
+function serializer_for(data)
+    Tables.istable(typeof(data)) && return CSVSerializer()
+    return OpaqueSerializer()
+end
+serializer_for(::AbstractDataFrame) = CSVSerializer()
+serializer_for(::NamedTuple)        = JSONSerializer()
+
+# --- Format inference for legacy TOML entries (no format field) --------------
+
+function _infer_format_from_path(fpath::String)
+    endswith(fpath, ".csv")  && return "csv"
+    endswith(fpath, ".json") && return "json"
+    return "jls"
+end
 
 # =============================================================================
 # CacheEntry
@@ -49,6 +151,7 @@ struct CacheEntry
     seq::Int              # stable integer index, persisted to TOML
     label::String
     path::String
+    format::String        # serializer format tag: "csv", "json", "jls", "png", …
     description::String   # human-readable source expression, or ""
     datecached::DateTime  # timestamp of last write; typemin(DateTime) = unknown (legacy entry)
     dateaccessed::DateTime # timestamp of last read; typemin(DateTime) = never accessed
@@ -239,7 +342,7 @@ function _load_index!(cache::DataCache)
     p = _index_file(cache)
     isfile(p) || return
     data = TOML.parsefile(p)
-    legacy = Tuple{String,String,String,String,DateTime,DateTime}[]  # (id, lbl, fpath, desc, dt, da) for seq==0
+    legacy = Tuple{String,String,String,String,String,DateTime,DateTime}[]  # (id, lbl, fpath, fmt, desc, dt, da) for seq==0
     max_seq = 0
     for (id, entry) in get(data, "entries", Dict())
         lbl    = get(entry, "label",       "")
@@ -272,20 +375,21 @@ function _load_index!(cache::DataCache)
              else
                  typemin(DateTime)
              end
+        fmt = get(entry, "format", _infer_format_from_path(fpath))
         if seq == 0
-            push!(legacy, (id, lbl, fpath, desc, dt, da))
+            push!(legacy, (id, lbl, fpath, fmt, desc, dt, da))
         else
             max_seq = max(max_seq, seq)
-            key = CacheEntry(id, seq, lbl, fpath, desc, dt, da)
+            key = CacheEntry(id, seq, lbl, fpath, fmt, desc, dt, da)
             cache._index[id] = key
             isempty(lbl) || (cache._by_label[lbl] = id)
         end
     end
     # Assign seq to legacy entries (no seq in TOML), ordered by datecached
-    sort!(legacy; by = t -> t[5])  # sort by dt
-    for (id, lbl, fpath, desc, dt, da) in legacy
+    sort!(legacy; by = t -> t[6])  # sort by dt
+    for (id, lbl, fpath, fmt, desc, dt, da) in legacy
         max_seq += 1
-        key = CacheEntry(id, max_seq, lbl, fpath, desc, dt, da)
+        key = CacheEntry(id, max_seq, lbl, fpath, fmt, desc, dt, da)
         cache._index[id] = key
         isempty(lbl) || (cache._by_label[lbl] = id)
     end
@@ -299,6 +403,7 @@ function _save_index(cache::DataCache)
             "seq"          => key.seq,
             "label"        => key.label,
             "path"         => relpath(key.path, cache.store),
+            "format"       => key.format,
             "description"  => key.description,
             "datecached"   => key.datecached == typemin(DateTime) ? "" :
                               Dates.format(key.datecached, "yyyy-mm-ddTHH:MM:SS"),
@@ -313,27 +418,13 @@ end
 
 # --- Storage helpers ---------------------------------------------------------
 
-function _data_path(cache::DataCache, id::String, data)
-    ext = data isa AbstractDataFrame ? ".csv" : ".jls"
-    return joinpath(cache.store, id * ext)
-end
-
-function _write_file(fpath::String, data)
-    if data isa AbstractDataFrame
-        CSV.write(fpath, data)
-    else
-        open(fpath, "w") do io
-            serialize(io, data)
-        end
-    end
+function _data_path(cache::DataCache, id::String, s::CacheSerializer)
+    return joinpath(cache.store, id * file_extension(s))
 end
 
 function _read_file(key::CacheEntry)
-    if endswith(key.path, ".csv")
-        return DataFrame(CSV.File(key.path; normalizenames = true))
-    else
-        return open(deserialize, key.path)
-    end
+    s = get(SERIALIZER_REGISTRY, key.format, OpaqueSerializer())
+    return read_data(s, key.path)
 end
 
 # --- Internal removal --------------------------------------------------------
@@ -349,31 +440,47 @@ end
 # --- Public write/read -------------------------------------------------------
 
 """
-    write!(cache::DataCache, data; label::AbstractString = "", description::AbstractString = "") → CacheEntry
+    write!(cache::DataCache, data; label::AbstractString = "", description::AbstractString = "", format::Union{String,Nothing} = nothing) → CacheEntry
 
 Store `data` in `cache` and return a [`CacheEntry`](@ref) describing the stored item.
 
-If `label` is given and another entry with that label already exists,
-it is silently replaced. `DataFrame` values are stored as CSV; all other
-values use Julia `Serialization`. `description` is an optional human-readable
-string (e.g. the source expression) stored alongside the entry for display.
+If `label` is given and another entry with that label already exists, it is silently
+replaced. The storage format is selected automatically based on the data type:
+
+- `DataFrame` and other Tables.jl-compatible types → `.csv`
+- `NamedTuple` → `.json` (JSON-primitive values only; Float32/Float16 widen to Float64)
+- Images (`Matrix{<:Colorant}`) → `.png` (requires FileIO to be loaded)
+- Anything else → `.jls` (Julia binary serialization; not stable across Julia versions)
+
+Pass `format` explicitly (e.g. `format = "jls"`) to override the automatic selection.
+
+`description` is an optional human-readable string (e.g. the source expression) stored
+alongside the entry for display.
 
 The returned [`CacheEntry`](@ref) can be passed directly to [`read`](@ref),
 [`delete!`](@ref), [`relabel!`](@ref), and related functions, or retrieved
 later by label using [`entry`](@ref).
 """
-function write!(cache::DataCache, data; label::AbstractString = "", description::AbstractString = "")
+function write!(cache::DataCache, data;
+                label::AbstractString       = "",
+                description::AbstractString = "",
+                format::Union{String,Nothing} = nothing)
+    s = if isnothing(format)
+            serializer_for(data)
+        else
+            get(SERIALIZER_REGISTRY, format, OpaqueSerializer())
+        end
     id    = string(uuid4())
     seq   = cache._next_seq
     cache._next_seq += 1
-    fpath = _data_path(cache, id, data)
-    _write_file(fpath, data)
+    fpath = _data_path(cache, id, s)
+    write_data(s, fpath, data)
     if !isempty(label)
         old = get(cache._by_label, label, nothing)
         isnothing(old) || _remove_entry!(cache, old)
         cache._by_label[label] = id
     end
-    key = CacheEntry(id, seq, label, fpath, description, Dates.now(), typemin(DateTime))
+    key = CacheEntry(id, seq, label, fpath, format_tag(s), description, Dates.now(), typemin(DateTime))
     cache._index[id] = key
     _save_index(cache)
     return key
@@ -392,7 +499,7 @@ function Base.read(cache::DataCache, key::CacheEntry)
     isfile(key.path) || error("Cache file missing: $(key.path)")
     data = _read_file(key)
     if cache.track_access
-        new_key = CacheEntry(key.id, key.seq, key.label, key.path, key.description,
+        new_key = CacheEntry(key.id, key.seq, key.label, key.path, key.format, key.description,
                            key.datecached, Dates.now())
         cache._index[key.id] = new_key
         _save_index(cache)
@@ -532,7 +639,7 @@ function _relabel_by_id!(cache::DataCache, id::String, new_label::AbstractString
         error("Label $(repr(new_label)) is already used by another cache entry")
     end
     isempty(current.label) || delete!(cache._by_label, current.label)
-    new_key = CacheEntry(id, current.seq, new_label, current.path, current.description,
+    new_key = CacheEntry(id, current.seq, new_label, current.path, current.format, current.description,
                        current.datecached, current.dateaccessed)
     cache._index[id] = new_key
     isempty(new_label) || (cache._by_label[new_label] = id)
@@ -606,7 +713,7 @@ Use this after many write/delete cycles to keep index numbers manageable.
 function reindexcache!(cache::DataCache)
     sorted = sort(collect(values(cache._index)); by = k -> k.seq)
     for (new_seq, key) in enumerate(sorted)
-        new_key = CacheEntry(key.id, new_seq, key.label, key.path, key.description,
+        new_key = CacheEntry(key.id, new_seq, key.label, key.path, key.format, key.description,
                            key.datecached, key.dateaccessed)
         cache._index[key.id] = new_key
     end
@@ -655,7 +762,7 @@ function movecache!(cache::DataCache, new_path::AbstractString)
     for (id, key) in cache._index
         new_abs = joinpath(dst, relpath(key.path, src))
         cache._index[id] = CacheEntry(key.id, key.seq, key.label, new_abs,
-                                    key.description, key.datecached, key.dateaccessed)
+                                    key.format, key.description, key.datecached, key.dateaccessed)
     end
     return cache
 end
@@ -749,7 +856,7 @@ function _do_import!(dest::DataCache, src_dir::AbstractString; conflict::Symbol)
             # :overwrite — write! will replace the existing entry
         end
         data = _read_file(src_key)
-        write!(dest, data; label=lbl, description=src_key.description)
+        write!(dest, data; label=lbl, description=src_key.description, format=src_key.format)
     end
 end
 

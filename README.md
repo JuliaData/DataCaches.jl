@@ -5,10 +5,24 @@
 [![Documentation (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaData.github.io/DataCaches.jl/dev)
 
 A lightweight, file-backed key-value cache for Julia for workflows
-that make frequent time-, internet or network bandwidth expensive function calls 
-(remote API queries, long-running computations) and need results to 
+that make frequent time-, internet or network bandwidth expensive function calls
+(remote API queries, long-running computations) and need results to
 be available across Julia sessions.
-*Any* Julia object can be cached to disk to persist across sessions as `.jls` Julia serialized object files, but a special consideration is given to `DataFrame` objects as these are stored as `.csv` files, so they can also be independently inspected, accessed, and manipulated if needed.
+
+DataCaches selects a transparent, inspectable storage format automatically based on
+the data type, falling back to Julia's binary serialization for types without a
+dedicated format:
+
+| Data type | Format | File | Version-stable? |
+|-----------|--------|------|----------------|
+| `DataFrame`, Tables.jl-compatible | CSV | `.csv` | Yes |
+| `NamedTuple` | JSON | `.json` | Yes (JSON-primitive values) |
+| Images (`Matrix{<:Colorant}`, requires FileIO) | PNG/JPG/TIF | `.png` etc. | Yes |
+| Anything else | Julia serialization | `.jls` | No |
+
+The storage format is recorded per entry so the correct deserializer is always used on
+read, regardless of the Julia version. Custom serializers can be registered for
+additional types.
 
 
 Three levels of caching are provided, from lightest-weight to most manual:
@@ -328,15 +342,16 @@ labels()             # default cache
 
 Each `CacheEntry` has these fields:
 
-| Field          | Type       | Description                                             |
-|:---------------|:-----------|:--------------------------------------------------------|
-| `e.id`         | `String`   | UUID (unique identifier)                                |
-| `e.seq`        | `Int`      | Stable integer index shown by `showcache`               |
-| `e.label`      | `String`   | User-assigned label (empty if none)                     |
-| `e.path`       | `String`   | Absolute path to the backing file                       |
-| `e.description`| `String`   | Source expression (from `@filecache`; empty if none)    |
-| `e.datecached` | `DateTime` | When the entry was written                              |
-| `e.dateaccessed`|`DateTime` | When the entry was last read                            |
+| Field           | Type       | Description                                             |
+|:----------------|:-----------|:--------------------------------------------------------|
+| `e.id`          | `String`   | UUID (unique identifier)                                |
+| `e.seq`         | `Int`      | Stable integer index shown by `showcache`               |
+| `e.label`       | `String`   | User-assigned label (empty if none)                     |
+| `e.path`        | `String`   | Absolute path to the backing file                       |
+| `e.format`      | `String`   | Storage format tag: `"csv"`, `"json"`, `"jls"`, `"png"`, … |
+| `e.description` | `String`   | Source expression (from `@filecache`; empty if none)    |
+| `e.datecached`  | `DateTime` | When the entry was written                              |
+| `e.dateaccessed`| `DateTime` | When the entry was last read                            |
 
 > **Backward compatibility:** `CacheKey` is a silent alias for `CacheEntry`. Code
 > written against earlier releases continues to work unchanged.

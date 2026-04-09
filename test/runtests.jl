@@ -2,6 +2,7 @@ using Test
 using DataCaches
 using DataFrames
 using Dates
+using Tables
 using TOML
 using ZipFile
 
@@ -1188,6 +1189,8 @@ using ZipFile
     end
 
     include("test_migrate_legacy_defaultcache.jl")
+    include("test_serializers.jl")
+    include("test_legacy_migration.jl")
 
     # Restore the original depot path after all tests.
     empty!(Base.DEPOT_PATH)
