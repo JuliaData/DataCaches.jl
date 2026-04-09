@@ -292,6 +292,57 @@ end
 ```
 
 ---
+## Inspecting entries — `entries`, `entry`, `labels`
+
+These exported functions provide the primary API for examining what is stored in a cache.
+No submodule import is needed.
+
+```julia
+using DataCaches
+
+dc = DataCache(:myproject)
+
+# --- Get all entries (returns Vector{CacheEntry}) ---
+all     = entries(dc)
+labeled = entries(dc; labeled = true)          # only entries with a user-assigned label
+recent  = entries(dc; after = DateTime("2026-01-01T00:00:00"))
+lru     = entries(dc; sortby = :dateaccessed_desc)   # oldest-accessed first (LRU)
+big     = entries(dc; sortby = :size_desc)            # largest first
+found   = entries(dc; pattern = r"canidae")           # regex on label / description
+entries()                                             # default cache
+
+# --- Get a single entry by label or sequence index ---
+e = entry(dc, "canidae_occs")   # by label  → CacheEntry (throws KeyError if absent)
+e = entry(dc, 3)                # by seq    → CacheEntry
+e = entry("canidae_occs")       # default cache
+
+# Use the entry to read data, delete, relabel, etc.
+data = read(dc, e)
+delete!(dc, e)
+relabel!(dc, e, "canidae_occurrences")
+
+# --- Get all user-assigned labels ---
+lbls = labels(dc)    # → Vector{String}, no empty strings
+labels()             # default cache
+```
+
+Each `CacheEntry` has these fields:
+
+| Field          | Type       | Description                                             |
+|:---------------|:-----------|:--------------------------------------------------------|
+| `e.id`         | `String`   | UUID (unique identifier)                                |
+| `e.seq`        | `Int`      | Stable integer index shown by `showcache`               |
+| `e.label`      | `String`   | User-assigned label (empty if none)                     |
+| `e.path`       | `String`   | Absolute path to the backing file                       |
+| `e.description`| `String`   | Source expression (from `@filecache`; empty if none)    |
+| `e.datecached` | `DateTime` | When the entry was written                              |
+| `e.dateaccessed`|`DateTime` | When the entry was last read                            |
+
+> **Backward compatibility:** `CacheKey` is a silent alias for `CacheEntry`. Code
+> written against earlier releases continues to work unchanged.
+
+---
+
 ## CacheAssets — managing assets within a cache
 
 `DataCaches.CacheAssets` is a submodule that provides a filesystem-style interface
@@ -307,12 +358,12 @@ using DataCaches.CacheAssets
 
 dc = DataCache(:myproject)
 
-# --- List (data) ---
-entries = CacheAssets.ls(dc)                                 # → Vector{CacheKey}
-entries = CacheAssets.ls(dc; pattern = r"canidae")           # filter by label/description
-entries = CacheAssets.ls(dc; sortby = :dateaccessed_desc)    # LRU: oldest access first
-entries = CacheAssets.ls(dc; sortby = :size_desc)            # largest first
-entries = CacheAssets.ls(dc; after = DateTime("2026-01-01T00:00:00"), labeled = true)
+# --- List (data) — same filter/sort kwargs as entries() ---
+all_entries = CacheAssets.ls(dc)                                 # → Vector{CacheEntry}
+all_entries = CacheAssets.ls(dc; pattern = r"canidae")           # filter by label/description
+all_entries = CacheAssets.ls(dc; sortby = :dateaccessed_desc)    # LRU: oldest access first
+all_entries = CacheAssets.ls(dc; sortby = :size_desc)            # largest first
+all_entries = CacheAssets.ls(dc; after = DateTime("2026-01-01T00:00:00"), labeled = true)
 
 # --- List (display) ---
 CacheAssets.ls!(dc)                                # normal detail: seq, timestamp, label, path
@@ -342,7 +393,7 @@ CacheAssets.cp(dc, "canidae_occs", dc2)
 CacheAssets.cp(dc, ["canidae_occs", "dino_taxa"], dc2)   # multiple assets
 
 # --- Default cache (omit the DataCache argument) ---
-CacheAssets.ls()                                   # → Vector{CacheKey}
+CacheAssets.ls()                                   # → Vector{CacheEntry}
 CacheAssets.ls!()                                  # prints to stdout
 CacheAssets.rm("stale_entry")
 CacheAssets.mv("old", "new")
@@ -351,7 +402,7 @@ CacheAssets.mv("old", "new")
 ### Access-time tracking
 
 By default, every `read` updates the `dateaccessed` timestamp on each entry's
-[`CacheKey`](@ref), enabling LRU inspection and future pruning. This requires
+[`CacheEntry`](@ref), enabling LRU inspection and future pruning. This requires
 rewriting the cache index on every read. For caches that are read very frequently
 or that contain many entries, opt out by constructing the cache with
 `track_access = false`:

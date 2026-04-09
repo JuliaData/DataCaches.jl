@@ -1,6 +1,7 @@
 using Test
 using DataCaches
 using DataFrames
+using Dates
 using TOML
 using ZipFile
 
@@ -27,7 +28,8 @@ using ZipFile
             c = DataCache(dir)
             df = DataFrame(x = [1, 2, 3], y = ["a", "b", "c"])
             key = write!(c, df; label = "test_df", description = "Test DataFrame")
-            @test key isa CacheKey
+            @test key isa CacheEntry          # primary type name
+            @test key isa CacheKey            # backward-compat alias still works
             @test key.label == "test_df"
             @test key.description == "Test DataFrame"
             @test haskey(c, "test_df")
@@ -158,7 +160,7 @@ using ZipFile
         end
     end
 
-    @testset "relabel! by CacheKey" begin
+    @testset "relabel! by CacheEntry" begin
         mktempdir() do dir
             c = DataCache(dir)
             key = write!(c, 42; label = "alpha")
@@ -908,6 +910,278 @@ using ZipFile
             finally
                 empty!(Base.DEPOT_PATH)
                 append!(Base.DEPOT_PATH, _orig_depot_path)
+            end
+        end
+
+    end
+
+    # =========================================================================
+    # CacheEntry / backward-compat CacheKey alias
+    # =========================================================================
+
+    @testset "CacheKey is a backward-compatible alias for CacheEntry" begin
+        @test CacheKey === CacheEntry
+        mktempdir() do dir
+            c = DataCache(dir)
+            e = write!(c, 42; label = "alias_test")
+            @test e isa CacheEntry
+            @test e isa CacheKey
+            # Constructing with the alias name still works
+            e2 = CacheKey(e.id, e.seq, e.label, e.path, e.description,
+                          e.datecached, e.dateaccessed)
+            @test e2 == e
+        end
+    end
+
+    # =========================================================================
+    # entries()
+    # =========================================================================
+
+    @testset "entries()" begin
+
+        @testset "returns all entries when no filters given" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "a")
+                write!(c, 2; label = "b")
+                write!(c, 3; label = "c")
+                result = entries(c)
+                @test result isa Vector{CacheEntry}
+                @test length(result) == 3
+            end
+        end
+
+        @testset "default form uses default_filecache" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_default_filecache!(c)
+                write!(c, 99; label = "default_entries_test")
+                result = entries()
+                @test any(e -> e.label == "default_entries_test", result)
+            end
+        end
+
+        @testset "sorted by :seq by default" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "first")
+                write!(c, 2; label = "second")
+                write!(c, 3; label = "third")
+                result = entries(c)
+                @test issorted([e.seq for e in result])
+            end
+        end
+
+        @testset "filter: labeled=true returns only labeled entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "named")
+                write!(c, 2)            # unlabeled
+                @test length(entries(c; labeled = true))  == 1
+                @test entries(c; labeled = true)[1].label == "named"
+            end
+        end
+
+        @testset "filter: labeled=false returns only unlabeled entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "named")
+                write!(c, 2)
+                @test length(entries(c; labeled = false)) == 1
+                @test isempty(entries(c; labeled = false)[1].label)
+            end
+        end
+
+        @testset "filter: pattern matches label" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "canidae_occs")
+                write!(c, 2; label = "dinosaur_taxa")
+                result = entries(c; pattern = r"canidae")
+                @test length(result) == 1
+                @test result[1].label == "canidae_occs"
+            end
+        end
+
+        @testset "filter: after/before by datecached" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e1 = write!(c, 1; label = "old")
+                sleep(0.05)   # ensure e2's datecached is strictly later than e1's
+                e2 = write!(c, 2; label = "new")
+                cutoff = e1.datecached + Dates.Millisecond(25)
+                @test length(entries(c; after = cutoff)) == 1
+                @test entries(c; after = cutoff)[1].label == "new"
+                @test length(entries(c; before = cutoff)) == 1
+                @test entries(c; before = cutoff)[1].label == "old"
+            end
+        end
+
+        @testset "sort: :label" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "zebra")
+                write!(c, 2; label = "apple")
+                write!(c, 3; label = "mango")
+                result = entries(c; sortby = :label)
+                @test [e.label for e in result] == ["apple", "mango", "zebra"]
+            end
+        end
+
+        @testset "sort: rev=true reverses order" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "a")
+                write!(c, 2; label = "b")
+                write!(c, 3; label = "c")
+                fwd = entries(c; sortby = :seq)
+                rev = entries(c; sortby = :seq, rev = true)
+                @test [e.label for e in fwd] == reverse([e.label for e in rev])
+            end
+        end
+
+        @testset "sort: :size_desc" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, ones(100); label = "big")
+                write!(c, ones(1);   label = "small")
+                result = entries(c; sortby = :size_desc)
+                @test result[1].label == "big"
+            end
+        end
+
+        @testset "filter: missing_file controls inclusion of entries with absent files" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e = write!(c, 42; label = "will_be_deleted")
+                write!(c, 99; label = "intact")
+                rm(e.path)
+                # Default (missing_file=false): entry with missing file is excluded
+                result_default = entries(c)
+                @test length(result_default) == 1
+                @test result_default[1].label == "intact"
+                # missing_file=true: entry with missing file is included alongside intact ones
+                result_inclusive = entries(c; missing_file = true)
+                @test length(result_inclusive) == 2
+                @test any(e -> e.label == "will_be_deleted", result_inclusive)
+            end
+        end
+
+        @testset "empty cache returns empty vector" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                @test entries(c) == CacheEntry[]
+            end
+        end
+    end
+
+    # =========================================================================
+    # entry()
+    # =========================================================================
+
+    @testset "entry()" begin
+
+        @testset "by label returns correct CacheEntry" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e_written = write!(c, 42; label = "findme")
+                e_found = entry(c, "findme")
+                @test e_found isa CacheEntry
+                @test e_found.label == "findme"
+                @test e_found.id == e_written.id
+            end
+        end
+
+        @testset "by sequence index returns correct CacheEntry" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "first")
+                write!(c, 2; label = "second")
+                e = entry(c, 1)
+                @test e isa CacheEntry
+                @test e.label == "first"
+            end
+        end
+
+        @testset "throws KeyError for missing label" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                @test_throws KeyError entry(c, "nonexistent")
+            end
+        end
+
+        @testset "throws KeyError for missing index" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                @test_throws KeyError entry(c, 99)
+            end
+        end
+
+        @testset "single-arg form uses default_filecache" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_default_filecache!(c)
+                write!(c, 7; label = "default_entry_test")
+                e = entry("default_entry_test")
+                @test e isa CacheEntry
+                @test e.label == "default_entry_test"
+            end
+        end
+
+        @testset "entry result can be used to read data" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, [10, 20, 30]; label = "readable")
+                e = entry(c, "readable")
+                @test Base.read(c, e) == [10, 20, 30]
+            end
+        end
+
+    end
+
+    # =========================================================================
+    # labels()
+    # =========================================================================
+
+    @testset "labels()" begin
+
+        @testset "returns only user-assigned labels (no empties)" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "foo")
+                write!(c, 2; label = "bar")
+                write!(c, 3)               # unlabeled
+                lbls = labels(c)
+                @test lbls isa Vector{String}
+                @test length(lbls) == 2
+                @test "foo" in lbls
+                @test "bar" in lbls
+                @test !any(isempty, lbls)
+            end
+        end
+
+        @testset "empty cache returns empty vector" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                @test labels(c) == String[]
+            end
+        end
+
+        @testset "matches keylabels for labeled entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "x")
+                write!(c, 2; label = "y")
+                @test sort(labels(c)) == sort(filter(!isempty, keylabels(c)))
+            end
+        end
+
+        @testset "default form uses default_filecache" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_default_filecache!(c)
+                write!(c, 5; label = "default_labels_test")
+                @test "default_labels_test" in labels()
             end
         end
 

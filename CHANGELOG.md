@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.3.1]
+
+### Added
+
+- **`CacheEntry` type**: `CacheKey` has been renamed to `CacheEntry` to better
+  reflect its role as a full metadata descriptor for a cached dataset (id, seq,
+  label, path, description, datecached, dateaccessed), not merely a lookup token.
+  `CacheEntry` is now the primary exported name. The `show` output is updated
+  accordingly: `CacheEntry("label")`.
+
+- **`CacheKey` backward-compatible alias**: `CacheKey` remains as a silent
+  `const` alias for `CacheEntry`. All existing code using `CacheKey` continues
+  to work without modification. A deprecation warning will be added in a future
+  release.
+
+- **`entries(cache; kwargs...) → Vector{CacheEntry}`**: New exported function
+  for bulk inspection of a cache's contents. Supports the full set of filter
+  and sort keyword arguments previously only available via `CacheAssets.ls`.
+  Zero-argument form `entries()` uses `default_filecache()`. This is now the
+  primary API for getting all entries; `keys()` is maintained as a backward-compat
+  alias.
+
+- **`entry(cache, label) → CacheEntry`** /
+  **`entry(cache, n::Integer) → CacheEntry`**: New exported function for
+  targeted single-entry lookup. Throws `KeyError` if the entry is absent.
+  Fills a gap in the prior API where there was no direct public way to retrieve
+  a `CacheEntry` by label or index without scanning all entries. Single-argument
+  form `entry(spec)` uses `default_filecache()`.
+
+- **`labels(cache) → Vector{String}`**: New exported function returning only
+  the user-assigned labels in a cache (no empty strings for unlabeled entries).
+  Equivalent to `filter(!isempty, keylabels(cache))` but more efficient and
+  more clearly named. Zero-argument form `labels()` uses `default_filecache()`.
+  `keylabels()` is maintained as a backward-compat alias.
+
+### Changed
+
+- **`CacheAssets.ls` docstring** updated to note that `entries()` exposes the
+  same data-retrieval functionality at the top level without a submodule import.
+
+- **`keys(cache)` docstring** updated to note that `entries()` is preferred for
+  new code; `keys()` is maintained for backward compatibility.
+
+---
+
 ## [0.3.0]
 
 ### Added

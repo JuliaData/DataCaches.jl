@@ -9,8 +9,9 @@ using Serialization
 using UUIDs
 using ZipFile
 
-export DataCache, CacheKey
+export DataCache, CacheEntry, CacheKey
 export write!, relabel!, reindexcache!, keylabels, keypaths, clear!, showcache, label, path
+export entries, entry, labels
 export @filecache, @filecache!, @memcache
 export default_filecache, set_default_filecache!, memcache_clear!
 export set_autocaching!
@@ -18,24 +19,32 @@ export autocache
 export scratch_datacache!
 
 # =============================================================================
-# CacheKey
+# CacheEntry
 # =============================================================================
 
 """
-    CacheKey
+    CacheEntry
 
-A reference to a cached dataset in a [`DataCache`](@ref).
+A metadata descriptor for a single cached dataset in a [`DataCache`](@ref).
 
-Fields are accessed directly:
-- `key.id            :: String`    — unique identifier (UUID)
-- `key.seq           :: Int`       — stable integer index (persisted; use `reindexcache!` to compact gaps)
-- `key.label         :: String`    — lookup key (hash string, or user-provided label; empty if none)
-- `key.path          :: String`    — absolute path to the backing data file
-- `key.description   :: String`    — human-readable source expression (empty if none was recorded)
-- `key.datecached    :: DateTime`  — when the entry was written; `typemin(DateTime)` if unknown
-- `key.dateaccessed  :: DateTime`  — when the entry was last read; `typemin(DateTime)` if never accessed
+A `CacheEntry` is returned by [`write!`](@ref), [`entries`](@ref), [`entry`](@ref),
+and related functions. Fields are accessed directly:
+
+- `e.id            :: String`    — unique identifier (UUID)
+- `e.seq           :: Int`       — stable integer index (persisted; use `reindexcache!` to compact gaps)
+- `e.label         :: String`    — user-assigned label (hash string for `@filecache` entries; empty if none)
+- `e.path          :: String`    — absolute path to the backing data file
+- `e.description   :: String`    — human-readable source expression (empty if none was recorded)
+- `e.datecached    :: DateTime`  — when the entry was written; `typemin(DateTime)` if unknown
+- `e.dateaccessed  :: DateTime`  — when the entry was last read; `typemin(DateTime)` if never accessed
+
+# Backward compatibility
+
+`CacheKey` is a backward-compatible alias for `CacheEntry`. Existing code using
+`CacheKey` continues to work without modification. The alias will gain a deprecation
+warning in a future release.
 """
-struct CacheKey
+struct CacheEntry
     id::String
     seq::Int              # stable integer index, persisted to TOML
     label::String
@@ -45,30 +54,33 @@ struct CacheKey
     dateaccessed::DateTime # timestamp of last read; typemin(DateTime) = never accessed
 end
 
-function Base.show(io::IO, k::CacheKey)
-    disp = !isempty(k.description) ? k.description :
-           !isempty(k.label)       ? k.label        : k.id[1:8]
-    print(io, "CacheKey($(repr(disp)))")
+# Backward-compatible alias; will gain a deprecation warning in a future release.
+const CacheKey = CacheEntry
+
+function Base.show(io::IO, e::CacheEntry)
+    disp = !isempty(e.description) ? e.description :
+           !isempty(e.label)       ? e.label        : e.id[1:8]
+    print(io, "CacheEntry($(repr(disp)))")
 end
 
-# Internal: format one CacheKey line with a given seq column width for alignment.
-function _print_cachekey(io::IO, k::CacheKey, seq_width::Int)
-    lbl    = !isempty(k.description) ? k.description :
-             !isempty(k.label)       ? k.label       : "(unlabeled)"
-    dt_str = k.datecached == typemin(DateTime) ?
+# Internal: format one CacheEntry line with a given seq column width for alignment.
+function _print_cacheentry(io::IO, e::CacheEntry, seq_width::Int)
+    lbl    = !isempty(e.description) ? e.description :
+             !isempty(e.label)       ? e.label       : "(unlabeled)"
+    dt_str = e.datecached == typemin(DateTime) ?
              " " ^ 19 :
-             Dates.format(k.datecached, "yyyy-mm-ddTHH:MM:SS")
-    status = isfile(k.path) ? "" : "  *** FILE MISSING ***"
-    seq_str = lpad(k.seq, seq_width)
+             Dates.format(e.datecached, "yyyy-mm-ddTHH:MM:SS")
+    status = isfile(e.path) ? "" : "  *** FILE MISSING ***"
+    seq_str = lpad(e.seq, seq_width)
     # prefix: "  [" + seq_str + "]  " + dt_str + "  " + uuid8 + "  "
     #          3   + seq_width + 3  +   19    +  2  +   8   +  2  = seq_width + 37
     prefix_len = seq_width + 37
-    println(io, "  [$(seq_str)]  $(dt_str)  $(k.id[1:8])  $lbl$status")
-    print(io,   " " ^ prefix_len * k.path)
+    println(io, "  [$(seq_str)]  $(dt_str)  $(e.id[1:8])  $lbl$status")
+    print(io,   " " ^ prefix_len * e.path)
 end
 
-function Base.show(io::IO, ::MIME"text/plain", k::CacheKey)
-    _print_cachekey(io, k, ndigits(k.seq))
+function Base.show(io::IO, ::MIME"text/plain", e::CacheEntry)
+    _print_cacheentry(io, e, ndigits(e.seq))
 end
 
 # =============================================================================
@@ -113,8 +125,8 @@ Use [`scratch_datacache!`](@ref) instead when you need the cache tied to *your o
 package's lifecycle rather than DataCaches.jl's.
 
 **`track_access` keyword:** when `true` (the default), every `read` updates the
-`dateaccessed` field of the corresponding [`CacheKey`](@ref) and rewrites the
-index. This supports LRU inspection via [`DataCaches.CacheAssets.ls`](@ref).
+`dateaccessed` field of the corresponding [`CacheEntry`](@ref) and rewrites the
+index. This supports LRU inspection via [`entries`](@ref) and [`DataCaches.CacheAssets.ls`](@ref).
 Set `track_access = false` to skip this rewrite on caches that are read very
 frequently or have many entries.
 
@@ -138,8 +150,11 @@ df = cache["Dinosaur families"]
 df = cache[key]
 
 # Introspect
-keys(cache)       # → Vector{CacheKey}
-keylabels(cache)  # → Vector{String}
+entries(cache)    # → Vector{CacheEntry} (primary — filterable, sortable)
+entry(cache, "Dinosaur families")  # → CacheEntry (single entry by label)
+labels(cache)     # → Vector{String} (user-assigned labels only)
+keys(cache)       # → Vector{CacheEntry} (backward-compat; prefer entries())
+keylabels(cache)  # → Vector{String} (backward-compat; prefer labels())
 keypaths(cache)   # → Vector{String}
 label(cache, key) # → String
 path(cache, key)  # → String
@@ -154,7 +169,7 @@ showcache(cache)
 """
 mutable struct DataCache
     store::String
-    _index::Dict{String,CacheKey}    # id → CacheKey
+    _index::Dict{String,CacheEntry}  # id → CacheEntry
     _by_label::Dict{String,String}   # label → id
     _next_seq::Int                   # monotonically incrementing seq counter
     track_access::Bool               # record dateaccessed on every read (opt-out with false)
@@ -173,7 +188,7 @@ end
 function DataCache(store::AbstractString = _default_cache_dir(); track_access::Bool = true)
     store = abspath(store)
     mkpath(store)
-    cache = DataCache(store, Dict{String,CacheKey}(), Dict{String,String}(), 1, track_access)
+    cache = DataCache(store, Dict{String,CacheEntry}(), Dict{String,String}(), 1, track_access)
     _load_index!(cache)
     return cache
 end
@@ -261,7 +276,7 @@ function _load_index!(cache::DataCache)
             push!(legacy, (id, lbl, fpath, desc, dt, da))
         else
             max_seq = max(max_seq, seq)
-            key = CacheKey(id, seq, lbl, fpath, desc, dt, da)
+            key = CacheEntry(id, seq, lbl, fpath, desc, dt, da)
             cache._index[id] = key
             isempty(lbl) || (cache._by_label[lbl] = id)
         end
@@ -270,7 +285,7 @@ function _load_index!(cache::DataCache)
     sort!(legacy; by = t -> t[5])  # sort by dt
     for (id, lbl, fpath, desc, dt, da) in legacy
         max_seq += 1
-        key = CacheKey(id, max_seq, lbl, fpath, desc, dt, da)
+        key = CacheEntry(id, max_seq, lbl, fpath, desc, dt, da)
         cache._index[id] = key
         isempty(lbl) || (cache._by_label[lbl] = id)
     end
@@ -313,7 +328,7 @@ function _write_file(fpath::String, data)
     end
 end
 
-function _read_file(key::CacheKey)
+function _read_file(key::CacheEntry)
     if endswith(key.path, ".csv")
         return DataFrame(CSV.File(key.path; normalizenames = true))
     else
@@ -334,14 +349,18 @@ end
 # --- Public write/read -------------------------------------------------------
 
 """
-    write!(cache::DataCache, data; label::AbstractString = "", description::AbstractString = "") → CacheKey
+    write!(cache::DataCache, data; label::AbstractString = "", description::AbstractString = "") → CacheEntry
 
-Store `data` in `cache` and return a [`CacheKey`](@ref).
+Store `data` in `cache` and return a [`CacheEntry`](@ref) describing the stored item.
 
 If `label` is given and another entry with that label already exists,
 it is silently replaced. `DataFrame` values are stored as CSV; all other
 values use Julia `Serialization`. `description` is an optional human-readable
 string (e.g. the source expression) stored alongside the entry for display.
+
+The returned [`CacheEntry`](@ref) can be passed directly to [`read`](@ref),
+[`delete!`](@ref), [`relabel!`](@ref), and related functions, or retrieved
+later by label using [`entry`](@ref).
 """
 function write!(cache::DataCache, data; label::AbstractString = "", description::AbstractString = "")
     id    = string(uuid4())
@@ -354,26 +373,26 @@ function write!(cache::DataCache, data; label::AbstractString = "", description:
         isnothing(old) || _remove_entry!(cache, old)
         cache._by_label[label] = id
     end
-    key = CacheKey(id, seq, label, fpath, description, Dates.now(), typemin(DateTime))
+    key = CacheEntry(id, seq, label, fpath, description, Dates.now(), typemin(DateTime))
     cache._index[id] = key
     _save_index(cache)
     return key
 end
 
 """
-    read(cache::DataCache, key::CacheKey) → data
+    read(cache::DataCache, entry::CacheEntry) → data
     read(cache::DataCache, label::AbstractString) → data
     read(cache::DataCache, n::Integer) → data
 
-Retrieve a cached dataset by [`CacheKey`](@ref), label string, or stable sequence
+Retrieve a cached dataset by [`CacheEntry`](@ref), label string, or stable sequence
 index. The `Integer` form uses the sequence index shown in brackets by `showcache`
 (e.g. `[1]`, `[2]`). Use `reindexcache!` to compact gaps after many deletions.
 """
-function Base.read(cache::DataCache, key::CacheKey)
+function Base.read(cache::DataCache, key::CacheEntry)
     isfile(key.path) || error("Cache file missing: $(key.path)")
     data = _read_file(key)
     if cache.track_access
-        new_key = CacheKey(key.id, key.seq, key.label, key.path, key.description,
+        new_key = CacheEntry(key.id, key.seq, key.label, key.path, key.description,
                            key.datecached, Dates.now())
         cache._index[key.id] = new_key
         _save_index(cache)
@@ -394,21 +413,25 @@ function Base.read(cache::DataCache, n::Integer)
 end
 
 Base.getindex(cache::DataCache, lbl::AbstractString) = Base.read(cache, lbl)
-Base.getindex(cache::DataCache, key::CacheKey)        = Base.read(cache, key)
+Base.getindex(cache::DataCache, key::CacheEntry)        = Base.read(cache, key)
 Base.getindex(cache::DataCache, n::Integer)           = Base.read(cache, n)
 Base.setindex!(cache::DataCache, data, lbl::AbstractString) = write!(cache, data; label = lbl)
 
 # --- Introspection -----------------------------------------------------------
 
 Base.haskey(cache::DataCache, lbl::AbstractString) = haskey(cache._by_label, lbl)
-Base.haskey(cache::DataCache, key::CacheKey)        = haskey(cache._index, key.id)
+Base.haskey(cache::DataCache, key::CacheEntry)        = haskey(cache._index, key.id)
 Base.length(cache::DataCache)  = length(cache._index)
 Base.isempty(cache::DataCache) = isempty(cache._index)
 
 """
-    keys(cache::DataCache) → Vector{CacheKey}
+    keys(cache::DataCache) → Vector{CacheEntry}
 
-Return all [`CacheKey`](@ref) objects stored in `cache`.
+Return all [`CacheEntry`](@ref) objects stored in `cache`.
+
+!!! note
+    Prefer [`entries`](@ref) for new code — it supports filtering and sorting.
+    `keys` is maintained for backward compatibility.
 """
 Base.keys(cache::DataCache) = collect(values(cache._index))
 
@@ -416,6 +439,10 @@ Base.keys(cache::DataCache) = collect(values(cache._index))
     keylabels(cache::DataCache) → Vector{String}
 
 Return all labels of entries in `cache` (empty string for unlabeled entries).
+
+!!! note
+    Prefer [`labels`](@ref) for new code — it returns only user-assigned labels
+    (no empty strings). `keylabels` is maintained for backward compatibility.
 """
 keylabels(cache::DataCache) = [k.label for k in values(cache._index)]
 
@@ -427,23 +454,23 @@ Return the file paths of all entries in `cache`.
 keypaths(cache::DataCache) = [k.path for k in values(cache._index)]
 
 """
-    label(cache::DataCache, key::CacheKey) → String
+    label(cache::DataCache, entry::CacheEntry) → String
 
-Return the label associated with `key` (same as `key.label`).
+Return the label associated with `entry` (same as `entry.label`).
 """
-label(::DataCache, key::CacheKey) = key.label
+label(::DataCache, entry::CacheEntry) = entry.label
 
 """
-    path(cache::DataCache, key::CacheKey) → String
+    path(cache::DataCache, entry::CacheEntry) → String
 
-Return the file path of the data file backing `key` (same as `key.path`).
+Return the file path of the data file backing `entry` (same as `entry.path`).
 """
-path(::DataCache, key::CacheKey) = key.path
+path(::DataCache, entry::CacheEntry) = entry.path
 
 # --- Management --------------------------------------------------------------
 
 """
-    delete!(cache::DataCache, key::CacheKey)
+    delete!(cache::DataCache, entry::CacheEntry)
     delete!(cache::DataCache, label::AbstractString)
     delete!(cache::DataCache, uuid_prefix::AbstractString)
     delete!(cache::DataCache, n::Integer)
@@ -451,13 +478,13 @@ path(::DataCache, key::CacheKey) = key.path
 Remove an entry from `cache` and delete its backing file from disk.
 
 The `AbstractString` form first tries to match a label exactly, then falls back
-to matching the UUID prefix shown in brackets by `describe` (e.g. `"2a9d4a87"`).
+to matching the UUID prefix shown in brackets by `showcache` (e.g. `"2a9d4a87"`).
 An ambiguous prefix (matching more than one entry) is an error.
 
 The `Integer` form identifies the entry by its stable sequence index (as shown
 in `showcache`). Use `reindexcache!` to compact gaps after many deletions.
 """
-function Base.delete!(cache::DataCache, key::CacheKey)
+function Base.delete!(cache::DataCache, key::CacheEntry)
     _remove_entry!(cache, key.id)
     _save_index(cache)
     return cache
@@ -505,7 +532,7 @@ function _relabel_by_id!(cache::DataCache, id::String, new_label::AbstractString
         error("Label $(repr(new_label)) is already used by another cache entry")
     end
     isempty(current.label) || delete!(cache._by_label, current.label)
-    new_key = CacheKey(id, current.seq, new_label, current.path, current.description,
+    new_key = CacheEntry(id, current.seq, new_label, current.path, current.description,
                        current.datecached, current.dateaccessed)
     cache._index[id] = new_key
     isempty(new_label) || (cache._by_label[new_label] = id)
@@ -514,22 +541,22 @@ function _relabel_by_id!(cache::DataCache, id::String, new_label::AbstractString
 end
 
 """
-    relabel!(cache::DataCache, key::CacheKey, new_label::AbstractString) → CacheKey
-    relabel!(cache::DataCache, old_label::AbstractString, new_label::AbstractString) → CacheKey
-    relabel!(cache::DataCache, n::Integer, new_label::AbstractString) → CacheKey
+    relabel!(cache::DataCache, entry::CacheEntry, new_label::AbstractString) → CacheEntry
+    relabel!(cache::DataCache, old_label::AbstractString, new_label::AbstractString) → CacheEntry
+    relabel!(cache::DataCache, n::Integer, new_label::AbstractString) → CacheEntry
 
 Rename the label of an existing cache entry without touching its backing data file.
 
-The `CacheKey` overload identifies the entry by its UUID. The `AbstractString`
+The `CacheEntry` overload identifies the entry by its UUID. The `AbstractString`
 overload first tries to match `old_label` as an exact label, then falls back to
 UUID-prefix matching (same rules as `delete!`). The `Integer` overload identifies
 the entry by its stable sequence index (as shown in `showcache`).
 
 Raises an error if `new_label` is already in use by a different entry.
-Returns the updated `CacheKey`.
+Returns the updated [`CacheEntry`](@ref).
 """
-function relabel!(cache::DataCache, key::CacheKey, new_label::AbstractString)
-    haskey(cache._index, key.id) || error("CacheKey not found in cache")
+function relabel!(cache::DataCache, key::CacheEntry, new_label::AbstractString)
+    haskey(cache._index, key.id) || error("CacheEntry not found in cache")
     return _relabel_by_id!(cache, key.id, new_label)
 end
 
@@ -579,7 +606,7 @@ Use this after many write/delete cycles to keep index numbers manageable.
 function reindexcache!(cache::DataCache)
     sorted = sort(collect(values(cache._index)); by = k -> k.seq)
     for (new_seq, key) in enumerate(sorted)
-        new_key = CacheKey(key.id, new_seq, key.label, key.path, key.description,
+        new_key = CacheEntry(key.id, new_seq, key.label, key.path, key.description,
                            key.datecached, key.dateaccessed)
         cache._index[key.id] = new_key
     end
@@ -603,7 +630,7 @@ public CacheAssets
 Move the cache's underlying store directory to `new_path`, updating `cache.store`.
 
 Because `cache_index.toml` stores paths as relative paths, the TOML file does not need
-rewriting. In-memory `CacheKey.path` fields (which are absolute) are updated in place.
+rewriting. In-memory `CacheEntry.path` fields (which are absolute) are updated in place.
 
   - If `new_path` does not exist, it is created (including any missing parent directories).
   - If `new_path == abspath(cache.store)`, returns `cache` unchanged (no-op).
@@ -627,7 +654,7 @@ function movecache!(cache::DataCache, new_path::AbstractString)
     # Update in-memory absolute paths; TOML uses relative paths and moved with the dir.
     for (id, key) in cache._index
         new_abs = joinpath(dst, relpath(key.path, src))
-        cache._index[id] = CacheKey(key.id, key.seq, key.label, new_abs,
+        cache._index[id] = CacheEntry(key.id, key.seq, key.label, new_abs,
                                     key.description, key.datecached, key.dateaccessed)
     end
     return cache
@@ -751,7 +778,7 @@ function Base.show(io::IO, ::MIME"text/plain", cache::DataCache)
     seq_width = isempty(entries) ? 1 : ndigits(entries[end].seq)
     println(io, "DataCache: $(cache.store)  ($n entr$(n == 1 ? "y" : "ies"))")
     for (i, key) in enumerate(entries)
-        _print_cachekey(io, key, seq_width)
+        _print_cacheentry(io, key, seq_width)
         i < n && println(io)
     end
 end
@@ -1154,5 +1181,119 @@ include("Caches.jl")
 Caches._datacache_ctor[] = DataCache
 include("CacheAssets.jl")
 include("_migrate_legacy_defaultcache.jl")
+
+# =============================================================================
+# entries / entry / labels — primary inspection API
+# =============================================================================
+
+"""
+    entries(cache::DataCache; kwargs...) → Vector{CacheEntry}
+    entries(; kwargs...) → Vector{CacheEntry}
+
+Return the entries of `cache` as a `Vector{`[`CacheEntry`](@ref)`}`, optionally
+filtered and sorted. When called without a `cache` argument, uses
+[`default_filecache()`](@ref).
+
+This is the primary function for inspecting a cache's contents. Use
+[`entry`](@ref) to look up a single entry by label or index, and
+[`labels`](@ref) to get just the labels.
+
+# Filtering keyword arguments
+
+| Keyword           | Type                   | Effect                                          |
+|:------------------|:-----------------------|:------------------------------------------------|
+| `pattern`         | `AbstractString`/Regex | Keep entries whose label or description matches |
+| `before`          | `DateTime`             | Keep entries cached before this time            |
+| `after`           | `DateTime`             | Keep entries cached after this time             |
+| `accessed_before` | `DateTime`             | Keep entries last accessed before this time     |
+| `accessed_after`  | `DateTime`             | Keep entries last accessed after this time      |
+| `labeled`         | `Bool`                 | `true` = only labeled; `false` = only unlabeled |
+| `missing_file`    | `Bool`                 | `true` = only entries whose backing file is gone|
+
+# Sorting keyword arguments
+
+| Keyword  | Values                                                                          |
+|:---------|:--------------------------------------------------------------------------------|
+| `sortby` | `:seq` (default), `:label`, `:date`, `:date_desc`, `:dateaccessed`,             |
+|          | `:dateaccessed_desc`, `:size`, `:size_desc`                                     |
+| `rev`    | `Bool` — reverse the sort order                                                 |
+
+# Examples
+```julia
+dc = DataCache(:myproject)
+
+all_entries   = entries(dc)
+labeled_only  = entries(dc; labeled = true)
+recent        = entries(dc; after = DateTime("2026-01-01T00:00:00"))
+lru           = entries(dc; sortby = :dateaccessed_desc)   # oldest-accessed first
+large_first   = entries(dc; sortby = :size_desc)
+canidae       = entries(dc; pattern = r"canidae")
+entries()                                                   # default cache
+```
+
+See also: [`entry`](@ref), [`labels`](@ref), [`keys`](@ref),
+[`DataCaches.CacheAssets.ls`](@ref).
+"""
+entries(cache::DataCache; kwargs...) = CacheAssets.ls(cache; kwargs...)
+entries(; kwargs...) = entries(default_filecache(); kwargs...)
+
+"""
+    entry(cache::DataCache, label::AbstractString) → CacheEntry
+    entry(cache::DataCache, n::Integer) → CacheEntry
+    entry(spec) → CacheEntry
+
+Look up a single [`CacheEntry`](@ref) by label string or sequence index `n`.
+When called with a single non-`DataCache` argument, uses [`default_filecache()`](@ref).
+
+Throws a `KeyError` if no matching entry exists.
+
+# Examples
+```julia
+dc = DataCache(:myproject)
+
+e = entry(dc, "dinosaurs")   # by label
+e = entry(dc, 3)             # by sequence index
+e = entry("dinosaurs")       # default cache, by label
+e = entry(2)                 # default cache, by index
+```
+
+See also: [`entries`](@ref), [`write!`](@ref), [`haskey`](@ref).
+"""
+function entry(cache::DataCache, label::AbstractString)
+    id = get(cache._by_label, label, nothing)
+    isnothing(id) && throw(KeyError(label))
+    return cache._index[id]
+end
+
+function entry(cache::DataCache, n::Integer)
+    e = _resolve_by_seq(cache, Int(n))
+    isnothing(e) && throw(KeyError(n))
+    return e
+end
+
+entry(spec) = entry(default_filecache(), spec)
+
+"""
+    labels(cache::DataCache) → Vector{String}
+    labels() → Vector{String}
+
+Return all user-assigned labels for entries in `cache`, excluding unlabeled entries
+(those keyed only by an auto-generated hash). When called without arguments, uses
+[`default_filecache()`](@ref).
+
+# Examples
+```julia
+dc = DataCache(:myproject)
+dc["foo"] = 1
+dc["bar"] = 2
+
+labels(dc)   # → ["foo", "bar"] (order may vary)
+labels()     # default cache
+```
+
+See also: [`entries`](@ref), [`keylabels`](@ref).
+"""
+labels(cache::DataCache) = collect(keys(cache._by_label))
+labels() = labels(default_filecache())
 
 end # module

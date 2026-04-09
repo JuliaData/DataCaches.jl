@@ -216,14 +216,19 @@ All four functions accept an optional leading `DataCache` argument. When omitted
 
 ### List assets
 
-`ls` returns a `Vector{CacheKey}` for programmatic use; `ls!` prints a formatted
+`ls` returns a `Vector{CacheEntry}` for programmatic use; `ls!` prints a formatted
 listing to an `IO` stream and returns `nothing`. Both accept the same filtering and
 sorting keyword arguments.
+
+!!! note
+    [`entries`](@ref) (exported at the top level) provides the same data-retrieval
+    functionality without importing `CacheAssets`. Use `CacheAssets.ls!` when you
+    want formatted output.
 
 ```julia
 using DataCaches.CacheAssets
 
-# --- Data form: returns Vector{CacheKey} ---
+# --- Data form: returns Vector{CacheEntry} ---
 
 entries = CacheAssets.ls(dc)
 
@@ -275,7 +280,7 @@ CacheAssets.ls!(; detail = :full, sortby = :date_desc)
 ### Remove assets
 
 ```julia
-# Remove by label, sequence index, UUID prefix, or CacheKey — in any combination
+# Remove by label, sequence index, UUID prefix, or CacheEntry — in any combination
 CacheAssets.rm(dc, "canidae_occs")
 CacheAssets.rm(dc, 3)
 CacheAssets.rm(dc, "canidae_occs", "dinosaur_taxa", 5)
@@ -331,7 +336,7 @@ new entry.
 ### Access-time tracking and LRU support
 
 Every `DataCache` records when each asset was last read via the `dateaccessed`
-field on [`CacheKey`](@ref). This is enabled by default; disable it for caches
+field on each [`CacheEntry`](@ref). This is enabled by default; disable it for caches
 that are read at very high frequency or have many entries, since every read
 triggers a full index rewrite:
 

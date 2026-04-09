@@ -1,16 +1,16 @@
 module CacheAssets
 
-import ..DataCaches: DataCache, CacheKey, default_filecache,
+import ..DataCaches: DataCache, CacheEntry, CacheKey, default_filecache,
                      _read_file, _remove_entry!, _save_index,
                      _resolve_by_seq, write!
 import Dates
 
 # =============================================================================
-# Internal: resolve any asset specifier → CacheKey
+# Internal: resolve any asset specifier → CacheEntry
 # =============================================================================
 
-function _resolve(cache::DataCache, spec::CacheKey)
-    haskey(cache._index, spec.id) || error("CacheKey not found in this cache")
+function _resolve(cache::DataCache, spec::CacheEntry)
+    haskey(cache._index, spec.id) || error("CacheEntry not found in this cache")
     return spec
 end
 
@@ -47,7 +47,7 @@ function _dt_str(dt::Dates.DateTime)
     return Dates.format(dt, "yyyy-mm-ddTHH:MM:SS")
 end
 
-function _ls_print(io::IO, entries::Vector{CacheKey}, sizes::Dict{String,Int},
+function _ls_print(io::IO, entries::Vector{CacheEntry}, sizes::Dict{String,Int},
                    detail::Symbol)
     if isempty(entries)
         println(io, "(no entries)")
@@ -174,10 +174,14 @@ function _ls_select(cache::DataCache;
 end
 
 """
-    DataCaches.CacheAssets.ls([cache::DataCache]; kwargs...) → Vector{CacheKey}
+    DataCaches.CacheAssets.ls([cache::DataCache]; kwargs...) → Vector{CacheEntry}
 
 Return a filtered and sorted vector of cache entries from `cache`.
 If `cache` is omitted, the active default cache is used (see `default_filecache()`).
+
+!!! note
+    [`DataCaches.entries`](@ref) exposes the same functionality at the top level
+    without needing to import `CacheAssets`.
 
 # Keyword arguments
 
@@ -212,7 +216,7 @@ function ls(cache::DataCache;
     entries, _ = _ls_select(cache;
                             pattern, before, after, accessed_before, accessed_after,
                             labeled, missing_file, sortby, rev,
-                            need_sizes = false)
+                            need_sizes = sortby ∈ (:size, :size_desc))
     return entries
 end
 
@@ -265,7 +269,7 @@ ls!(; kwargs...) = ls!(default_filecache(); kwargs...)
     DataCaches.CacheAssets.rm([cache::DataCache,] assets...; force=false)
 
 Remove one or more assets from `cache` (default: active default cache).
-Each asset can be specified as a `CacheKey`, label `String`, UUID-prefix `String`,
+Each asset can be specified as a [`CacheEntry`](@ref), label `String`, UUID-prefix `String`,
 or sequence index `Integer`. The backing data file is also deleted from disk.
 
 All removals are batched into a single index rewrite for efficiency.
@@ -296,7 +300,7 @@ rm(assets...; kwargs...) = rm(default_filecache(), assets...; kwargs...)
 """
     DataCaches.CacheAssets.mv([src_cache::DataCache,] src, dest; kwargs...)
 
-Move or relabel a cache asset. `src` can be a `CacheKey`, label `String`,
+Move or relabel a cache asset. `src` can be a [`CacheEntry`](@ref), label `String`,
 UUID-prefix `String`, or sequence index `Integer`.
 
 **Relabel within the same cache** (when `dest` is a `String`):
@@ -326,8 +330,8 @@ function mv(cache::DataCache, src, dest::AbstractString; force::Bool = false)
         _remove_entry!(cache, existing_id)
     end
     isempty(key.label) || delete!(cache._by_label, key.label)
-    new_key = CacheKey(key.id, key.seq, dest, key.path, key.description,
-                       key.datecached, key.dateaccessed)
+    new_key = CacheEntry(key.id, key.seq, dest, key.path, key.description,
+                        key.datecached, key.dateaccessed)
     cache._index[key.id] = new_key
     isempty(dest) || (cache._by_label[dest] = key.id)
     _save_index(cache)
@@ -365,7 +369,7 @@ Copy one or more assets to `dest_cache`. Each copy receives a new UUID, sequence
 number, and `datecached` timestamp in the destination. Copying within the same
 cache is allowed and produces a distinct new entry.
 
-`src` / each element of `srcs` can be a `CacheKey`, label `String`, UUID-prefix
+`src` / each element of `srcs` can be a [`CacheEntry`](@ref), label `String`, UUID-prefix
 `String`, or sequence index `Integer`.
 
 **Single-source form:**
@@ -392,7 +396,7 @@ end
 function cp(src_cache::DataCache, srcs::AbstractVector, dest_cache::DataCache;
             force::Bool = false)
     isempty(srcs) && error("cp: at least one source specifier is required")
-    results = CacheKey[]
+    results = CacheEntry[]
     for src in srcs
         key = _resolve(src_cache, src)
         new_label = key.label
