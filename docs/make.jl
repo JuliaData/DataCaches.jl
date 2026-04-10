@@ -4,7 +4,7 @@ using Documenter
 DocMeta.setdocmeta!(DataCaches, :DocTestSetup, :(using DataCaches); recursive=true)
 
 makedocs(;
-    modules=[DataCaches, DataCaches.Caches],
+    modules=[DataCaches, DataCaches.Caches, DataCaches.CacheAssets],
     authors="Jeet Sukumaran <jeetsukumaran@gmail.com>",
     sitename="DataCaches.jl",
     format=Documenter.HTML(;
@@ -13,7 +13,10 @@ makedocs(;
         assets=String[],
     ),
     pages=[
-        "Home" => "index.md",
+        "Home"                => "index.md",
+        "API Reference"       => "api.md",
+        "Caches"              => "caches.md",
+        "Cache Assets"        => "cache_assets.md",
         "Library Integration" => "integration.md",
     ],
 )
