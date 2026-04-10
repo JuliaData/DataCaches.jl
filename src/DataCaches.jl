@@ -169,9 +169,18 @@ end
 const CacheKey = CacheEntry
 
 function Base.show(io::IO, e::CacheEntry)
-    disp = !isempty(e.description) ? e.description :
-           !isempty(e.label)       ? e.label        : e.id[1:8]
-    print(io, "CacheEntry($(repr(disp)))")
+    dt_cached   = e.datecached   == typemin(DateTime) ? "(unknown)" : Dates.format(e.datecached,   "yyyy-mm-ddTHH:MM:SS")
+    dt_accessed = e.dateaccessed == typemin(DateTime) ? "(never)"   : Dates.format(e.dateaccessed, "yyyy-mm-ddTHH:MM:SS")
+    label_str = !isempty(e.label)       ? repr(e.label)       : "(none)"
+    desc_str  = !isempty(e.description) ? repr(e.description) : "(none)"
+    status    = isfile(e.path) ? "" : "  *** FILE MISSING ***"
+    print(io, "CacheEntry(\n" *
+              "  seq=$(e.seq)  id=$(e.id[1:8])…  format=$(repr(e.format))$status\n" *
+              "  label=$(label_str)\n" *
+              "  description=$(desc_str)\n" *
+              "  datecached=$(dt_cached)  dateaccessed=$(dt_accessed)\n" *
+              "  path=$(repr(e.path))\n" *
+              ")")
 end
 
 # Internal: format one CacheEntry line with a given seq column width for alignment.
