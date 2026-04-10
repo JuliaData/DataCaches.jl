@@ -589,8 +589,9 @@ path(::DataCache, entry::CacheEntry) = entry.path
     delete!(cache::DataCache, label::AbstractString)
     delete!(cache::DataCache, uuid_prefix::AbstractString)
     delete!(cache::DataCache, n::Integer)
+    delete!(cache::DataCache, specs::AbstractVector)
 
-Remove an entry from `cache` and delete its backing file from disk.
+Remove an entry (or multiple entries) from `cache` and delete their backing files from disk.
 
 The `AbstractString` form first tries to match a label exactly, then falls back
 to matching the UUID prefix shown in brackets by `showcache` (e.g. `"2a9d4a87"`).
@@ -598,6 +599,10 @@ An ambiguous prefix (matching more than one entry) is an error.
 
 The `Integer` form identifies the entry by its stable sequence index (as shown
 in `showcache`). Use `reindexcache!` to compact gaps after many deletions.
+
+The `AbstractVector` form accepts a vector of any mix of `CacheEntry`, label `String`,
+UUID-prefix `String`, and sequence index `Integer` specifiers. All removals are batched
+into a single index rewrite for efficiency. Unresolvable specifiers are silently skipped.
 """
 function Base.delete!(cache::DataCache, key::CacheEntry)
     _remove_entry!(cache, key.id)
@@ -626,6 +631,28 @@ function Base.delete!(cache::DataCache, n::Integer)
     key = _resolve_by_seq(cache, Int(n))
     isnothing(key) && return cache
     _remove_entry!(cache, key.id)
+    _save_index(cache)
+    return cache
+end
+
+function Base.delete!(cache::DataCache, specs::AbstractVector)
+    isempty(specs) && return cache
+    for spec in specs
+        if spec isa CacheEntry
+            _remove_entry!(cache, spec.id)
+        elseif spec isa Integer
+            key = _resolve_by_seq(cache, Int(spec))
+            isnothing(key) || _remove_entry!(cache, key.id)
+        elseif spec isa AbstractString
+            id = get(cache._by_label, spec, nothing)
+            if isnothing(id)
+                matches = [k for k in Base.keys(cache._index) if startswith(k, spec)]
+                length(matches) > 1 && error("Ambiguous UUID prefix $(repr(spec)) matches $(length(matches)) entries")
+                length(matches) == 1 && (id = only(matches))
+            end
+            isnothing(id) || _remove_entry!(cache, id)
+        end
+    end
     _save_index(cache)
     return cache
 end

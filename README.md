@@ -369,6 +369,7 @@ All functions accept an optional leading `DataCache` argument. When omitted,
 ```julia
 using DataCaches
 using DataCaches.CacheAssets
+using Dates
 
 dc = DataCache(:myproject)
 
@@ -379,11 +380,21 @@ all_entries = CacheAssets.ls(dc; sortby = :dateaccessed_desc)    # LRU: oldest a
 all_entries = CacheAssets.ls(dc; sortby = :size_desc)            # largest first
 all_entries = CacheAssets.ls(dc; after = DateTime("2026-01-01T00:00:00"), labeled = true)
 
+# Filter by file path / filename
+csv_entries  = CacheAssets.ls(dc; filename_pattern = r"\.csv$")          # CSV-backed only
+proj_entries = CacheAssets.ls(dc; filepath_pattern = r"/myproject/")     # path substring
+stale        = CacheAssets.ls(dc; before = DateTime("2026-01-01T00:00:00"))  # old entries
+
+# Filter by access date
+hot  = CacheAssets.ls(dc; accessed_after_date  = DateTime("2026-03-01T00:00:00"))
+cold = CacheAssets.ls(dc; accessed_before_date = DateTime("2026-01-01T00:00:00"))
+
 # --- List (display) ---
 CacheAssets.ls!(dc)                                # normal detail: seq, timestamp, label, path
 CacheAssets.ls!(dc; detail = :minimal)             # seq + label only
 CacheAssets.ls!(dc; detail = :full)                # + access time, file size, format
 CacheAssets.ls!(dc; pattern = r"canidae")          # filter by label/description (same as ls)
+CacheAssets.ls!(dc; filename_pattern = r"\.csv$")  # CSV-backed entries
 CacheAssets.ls!(dc; sortby = :dateaccessed_desc)   # LRU: oldest access first
 CacheAssets.ls!(dc; sortby = :size_desc)           # largest first
 CacheAssets.ls!(dc; io = my_io)                    # redirect output
@@ -392,6 +403,15 @@ CacheAssets.ls!(dc; io = my_io)                    # redirect output
 CacheAssets.rm(dc, "old_label")                    # by label
 CacheAssets.rm(dc, 2)                              # by sequence index
 CacheAssets.rm(dc, "label1", "label2", 5)          # multiple assets, single index rewrite
+
+# Vector form — handy with ls results (one batched index rewrite)
+CacheAssets.rm(dc, stale)                          # remove all stale entries
+CacheAssets.rm(dc, [entry1, "label2", 5])          # mixed specifier types
+CacheAssets.rm(dc, ["maybe1", "maybe2"]; force = true)  # skip unresolvable
+
+# delete! also accepts a vector directly on the DataCache
+delete!(dc, stale)
+delete!(dc, ["canidae_occs", 3, entry1])
 
 # --- Relabel within a cache ---
 CacheAssets.mv(dc, "old_label", "new_label")
@@ -410,6 +430,7 @@ CacheAssets.cp(dc, ["canidae_occs", "dino_taxa"], dc2)   # multiple assets
 CacheAssets.ls()                                   # → Vector{CacheEntry}
 CacheAssets.ls!()                                  # prints to stdout
 CacheAssets.rm("stale_entry")
+CacheAssets.rm(stale)                              # vector form also works
 CacheAssets.mv("old", "new")
 ```
 

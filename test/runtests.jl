@@ -710,6 +710,222 @@ using ZipFile
             end
         end
 
+        @testset "ls filters by filepath_pattern (Regex)" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "alpha")
+                write!(c, rand(3); label = "beta")
+                # All entries live in `dir`, so a pattern matching dir returns all
+                all_entries = DataCaches.CacheAssets.ls(c; filepath_pattern = Regex(dir))
+                @test length(all_entries) == 2
+                # A pattern that matches nothing returns empty
+                none = DataCaches.CacheAssets.ls(c; filepath_pattern = r"__no_such_path__")
+                @test isempty(none)
+            end
+        end
+
+        @testset "ls filters by filepath_pattern (String → Regex)" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "fp_str")
+                all_entries = DataCaches.CacheAssets.ls(c; filepath_pattern = dir)
+                @test length(all_entries) == 1
+            end
+        end
+
+        @testset "ls filters by filename_pattern" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "fn_one")
+                write!(c, rand(3); label = "fn_two")
+                # All backing files are .jls
+                jls_entries = DataCaches.CacheAssets.ls(c; filename_pattern = r"\.jls$")
+                @test length(jls_entries) == 2
+                # Pattern that matches nothing
+                none = DataCaches.CacheAssets.ls(c; filename_pattern = r"\.csv$")
+                @test isempty(none)
+            end
+        end
+
+        @testset "ls! accepts filepath_pattern and filename_pattern" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, rand(3); label = "display_test")
+                buf = IOBuffer()
+                DataCaches.CacheAssets.ls!(c; filename_pattern = r"\.jls$", io = buf)
+                output = String(take!(buf))
+                @test occursin("display_test", output)
+            end
+        end
+
+        @testset "ls filters by accessed_before_date / accessed_after_date" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                k = write!(c, rand(3); label = "acc_test")
+                # Read the entry to set dateaccessed
+                _ = Base.read(c, "acc_test")
+                now_dt = Dates.now()
+                # accessed_before_date: entry was just accessed, so it should be excluded
+                # when we ask for entries accessed before a past time
+                past = now_dt - Dates.Second(3600)
+                before_result = DataCaches.CacheAssets.ls(c; accessed_before_date = past)
+                @test isempty(before_result)
+                # accessed_after_date: entry was accessed just now, so future cutoff includes it
+                future = now_dt + Dates.Second(3600)
+                after_result = DataCaches.CacheAssets.ls(c; accessed_after_date = past)
+                @test length(after_result) == 1
+            end
+        end
+
+    end
+
+    @testset "CacheAssets.rm — vector form" begin
+
+        @testset "rm(cache, vector_of_entries) removes all and does single index rewrite" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                k1 = write!(c, [1, 2]; label = "rm_v1")
+                k2 = write!(c, [3, 4]; label = "rm_v2")
+                write!(c, [5, 6]; label = "rm_keep")
+                DataCaches.CacheAssets.rm(c, [k1, k2])
+                @test !haskey(c, "rm_v1")
+                @test !haskey(c, "rm_v2")
+                @test  haskey(c, "rm_keep")
+                @test length(c) == 1
+            end
+        end
+
+        @testset "rm(cache, vector of labels) removes by label" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "a")
+                write!(c, 2; label = "b")
+                write!(c, 3; label = "c")
+                DataCaches.CacheAssets.rm(c, ["a", "b"])
+                @test !haskey(c, "a")
+                @test !haskey(c, "b")
+                @test  haskey(c, "c")
+            end
+        end
+
+        @testset "rm(cache, mixed vector) accepts CacheEntry, String, Integer" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                k1 = write!(c, 1; label = "mix1")
+                write!(c, 2; label = "mix2")
+                write!(c, 3; label = "mix3")
+                # remove by CacheEntry, String label, and seq index in one call
+                seq3 = only(filter(e -> e.label == "mix3", collect(values(c._index)))).seq
+                DataCaches.CacheAssets.rm(c, [k1, "mix2", seq3])
+                @test isempty(c)
+            end
+        end
+
+        @testset "rm(cache, vector; force=true) skips unresolvable specifiers" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 42; label = "survivor")
+                DataCaches.CacheAssets.rm(c, ["nonexistent", "also_gone"]; force = true)
+                @test haskey(c, "survivor")
+                @test length(c) == 1
+            end
+        end
+
+        @testset "rm(cache, empty vector) is a no-op" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "x")
+                DataCaches.CacheAssets.rm(c, CacheEntry[])
+                @test length(c) == 1
+            end
+        end
+
+    end
+
+    @testset "delete! — vector form" begin
+
+        @testset "delete!(cache, vector_of_CacheEntry) removes all" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                k1 = write!(c, 1; label = "dv1")
+                k2 = write!(c, 2; label = "dv2")
+                write!(c, 3; label = "dv_keep")
+                delete!(c, [k1, k2])
+                @test !haskey(c, "dv1")
+                @test !haskey(c, "dv2")
+                @test  haskey(c, "dv_keep")
+            end
+        end
+
+        @testset "delete!(cache, vector of labels)" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "dl_a")
+                write!(c, 2; label = "dl_b")
+                write!(c, 3; label = "dl_c")
+                delete!(c, ["dl_a", "dl_b"])
+                @test !haskey(c, "dl_a")
+                @test !haskey(c, "dl_b")
+                @test  haskey(c, "dl_c")
+            end
+        end
+
+        @testset "delete!(cache, vector of integers)" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "di1")
+                write!(c, 2; label = "di2")
+                seq1 = only(filter(e -> e.label == "di1", collect(values(c._index)))).seq
+                seq2 = only(filter(e -> e.label == "di2", collect(values(c._index)))).seq
+                delete!(c, [seq1, seq2])
+                @test isempty(c)
+            end
+        end
+
+        @testset "delete!(cache, mixed vector) accepts CacheEntry, String, Integer" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                k1 = write!(c, 1; label = "dm1")
+                write!(c, 2; label = "dm2")
+                write!(c, 3; label = "dm3")
+                seq3 = only(filter(e -> e.label == "dm3", collect(values(c._index)))).seq
+                delete!(c, [k1, "dm2", seq3])
+                @test isempty(c)
+            end
+        end
+
+        @testset "delete!(cache, vector) skips unresolvable labels silently" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 42; label = "keep_me")
+                delete!(c, ["nonexistent_label"])
+                @test haskey(c, "keep_me")
+            end
+        end
+
+        @testset "delete!(cache, empty vector) is a no-op" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "noop")
+                delete!(c, String[])
+                @test haskey(c, "noop")
+            end
+        end
+
+        @testset "delete! vector form persists to disk" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                k1 = write!(c, 1; label = "persist_del1")
+                k2 = write!(c, 2; label = "persist_del2")
+                write!(c, 3; label = "persist_keep")
+                delete!(c, [k1, k2])
+                c2 = DataCache(dir)
+                @test !haskey(c2, "persist_del1")
+                @test !haskey(c2, "persist_del2")
+                @test  haskey(c2, "persist_keep")
+            end
+        end
+
     end
 
     @testset "Caches" begin

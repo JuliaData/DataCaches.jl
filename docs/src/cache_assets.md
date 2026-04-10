@@ -34,10 +34,17 @@ entries = CacheAssets.ls(dc)
 entries = CacheAssets.ls(dc; pattern = r"canidae")
 entries = CacheAssets.ls(dc; pattern = "dino")          # string is converted to Regex
 
+# Filter by file path (full path or filename only)
+entries = CacheAssets.ls(dc; filepath_pattern = r"/project/caches/")
+entries = CacheAssets.ls(dc; filepath_pattern = "/scratch")    # string → Regex
+entries = CacheAssets.ls(dc; filename_pattern = r"^abc1234")   # UUID-prefix match
+entries = CacheAssets.ls(dc; filename_pattern = r"\.csv$")     # CSV-backed entries only
+
 # Filter by write or access date
 entries = CacheAssets.ls(dc; after  = DateTime("2026-01-01T00:00:00"))
 entries = CacheAssets.ls(dc; before = DateTime("2026-06-01T00:00:00"))
-entries = CacheAssets.ls(dc; accessed_after = DateTime("2026-03-01T00:00:00"))
+entries = CacheAssets.ls(dc; accessed_after_date  = DateTime("2026-03-01T00:00:00"))
+entries = CacheAssets.ls(dc; accessed_before_date = DateTime("2026-06-01T00:00:00"))
 
 # Filter by whether the entry has a label
 entries = CacheAssets.ls(dc; labeled = true)   # only labeled entries
@@ -66,6 +73,7 @@ CacheAssets.ls!(dc; detail = :full)
 
 # All ls filter/sort kwargs are also accepted by ls!
 CacheAssets.ls!(dc; pattern = r"canidae", sortby = :date_desc)
+CacheAssets.ls!(dc; filename_pattern = r"\.csv$", detail = :full)
 
 # Redirect output
 CacheAssets.ls!(dc; io = my_io)
@@ -83,11 +91,18 @@ CacheAssets.rm(dc, "canidae_occs")
 CacheAssets.rm(dc, 3)
 CacheAssets.rm(dc, "canidae_occs", "dinosaur_taxa", 5)
 
+# Pass a vector of specifiers (any mix of CacheEntry, label String, seq Integer)
+stale = CacheAssets.ls(dc; before = DateTime("2026-01-01"))
+CacheAssets.rm(dc, stale)                              # remove all at once (one index rewrite)
+CacheAssets.rm(dc, [entry1, "old_label", 7])           # mixed-type vector
+
 # Suppress errors for missing specifiers
 CacheAssets.rm(dc, "maybe_exists"; force = true)
+CacheAssets.rm(dc, ["maybe1", "maybe2"]; force = true)
 
 # Default cache
 CacheAssets.rm("old_entry")
+CacheAssets.rm(stale)
 ```
 
 ## Relabel and move assets
@@ -150,8 +165,11 @@ least-recently-used assets.
 
 | Function | Description |
 |---|---|
-| `CacheAssets.ls([dc]; detail, pattern, before, after, accessed_before, accessed_after, labeled, sortby, rev)` | List assets in a cache |
-| `CacheAssets.rm([dc,] assets...; force)` | Remove assets (batched index rewrite) |
+| `CacheAssets.ls([dc]; pattern, filepath_pattern, filename_pattern, before, after, accessed_before_date, accessed_after_date, labeled, sortby, rev)` | List assets in a cache |
+| `CacheAssets.ls!([dc]; detail, …same filters…, io)` | Print formatted listing to `io` |
+| `CacheAssets.rm([dc,] assets...; force)` | Remove assets by varargs (batched index rewrite) |
+| `CacheAssets.rm([dc,] specs::Vector; force)` | Remove assets by vector (batched index rewrite) |
+| `delete!(dc, specs::Vector)` | Remove assets by vector from `DataCache` directly |
 | `CacheAssets.mv([dc,] src, new_label; force)` | Relabel an asset within a cache |
 | `CacheAssets.mv([src_dc,] src, dest_dc; label, force)` | Move asset to another cache |
 | `CacheAssets.cp([src_dc,] src, dest_dc; label, force)` | Copy asset to another cache |

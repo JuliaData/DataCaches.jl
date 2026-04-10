@@ -1,23 +1,30 @@
 ## Planned
 
+### Cache rebuild
+
+Add rebuild cache -- missing files removed from index etc. All with @debug logging of individual files found, @warn if not found, @error if cache malformed etc. Rebuild proceeds if kwarg `dr
+
 ### Expiration / invalidation primitives
 
-Right now refresh is basically:
+Right now refresh/delete is basically:
 
 @filecache!
 overwrite by label
 manual delete
 library-side force_refresh
 
-That is enough for development, but not enough for a mature caching package. 1.0 should have first-class invalidation:
+That is enough for development, but not enough for a mature caching package. 1.0 should have first-class invalidation and cleaning:
 
 TTL / max-age
 stale-while-revalidate or at least stale detection
 invalidate by label/pattern/predicate
 invalidate all entries for a function/endpoint/path pattern
 "refresh if older than X"
-"delete if not visited for more than X days"
-"delete based on: path pattern, label pattern, etc."
+"purge! (delete!) if not visited for more than X days"
+
+### Autocleaning
+
+Set at cache level on creation `DataCache(...; autopurge = true, (autopurge) kwargs...)` or by calling `set_autopurge!([::DataCache]; kwargs...)`
 
 
 ### Atomic writes and corruption resistance
