@@ -1,4 +1,3 @@
-
 # Migration helpers for legacy default-cache locations.
 # migrate_legacy_defaultcache : v0.1.0 → v0.2.0  (remove once v0.1.0 unsupported)
 # migrate_v020_defaultcache   : v0.2.0 → v0.3.0+

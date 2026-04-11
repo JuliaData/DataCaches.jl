@@ -1,8 +1,8 @@
 module CacheAssets
 
 import ..DataCaches: DataCache, CacheEntry, CacheEntry, default_filecache,
-                     _read_file, _remove_entry!, _save_index,
-                     _resolve_by_seq, write!, isstale
+    _read_file, _remove_entry!, _save_index,
+    _resolve_by_seq, write!, isstale
 import Dates
 
 # =============================================================================
@@ -37,9 +37,9 @@ end
 
 function _fmt_size(bytes::Integer)
     bytes < 1024   && return "$(bytes) B"
-    bytes < 1024^2 && return "$(round(bytes / 1024,        digits=1)) KiB"
-    bytes < 1024^3 && return "$(round(bytes / 1024^2,      digits=1)) MiB"
-    return                   "$(round(bytes / 1024^3,      digits=2)) GiB"
+    bytes < 1024^2 && return "$(round(bytes / 1024, digits = 1)) KiB"
+    bytes < 1024^3 && return "$(round(bytes / 1024^2, digits = 1)) MiB"
+    return "$(round(bytes / 1024^3, digits = 2)) GiB"
 end
 
 function _dt_str(dt::Dates.DateTime)
@@ -47,8 +47,10 @@ function _dt_str(dt::Dates.DateTime)
     return Dates.format(dt, "yyyy-mm-ddTHH:MM:SS")
 end
 
-function _ls_print(io::IO, entries::Vector{CacheEntry}, sizes::Dict{String,Int},
-                   detail::Symbol)
+function _ls_print(
+        io::IO, entries::Vector{CacheEntry}, sizes::Dict{String, Int},
+        detail::Symbol
+    )
     if isempty(entries)
         println(io, "(no entries)")
         return
@@ -57,10 +59,10 @@ function _ls_print(io::IO, entries::Vector{CacheEntry}, sizes::Dict{String,Int},
     n = length(entries)
     for (i, k) in enumerate(entries)
         label_str = !isempty(k.description) ? k.description :
-                    !isempty(k.label)       ? k.label       : "(unlabeled)"
-        file_ok   = isfile(k.path)
-        miss_tag  = file_ok ? "" : "  *** FILE MISSING ***"
-        seq_str   = lpad(k.seq, seq_width)
+            !isempty(k.label) ? k.label : "(unlabeled)"
+        file_ok = isfile(k.path)
+        miss_tag = file_ok ? "" : "  *** FILE MISSING ***"
+        seq_str = lpad(k.seq, seq_width)
         # prefix_len: "  [" + seq_width + "]  " + 19 + "  " + 8 + "  " = seq_width + 37
         prefix_len = seq_width + 37
 
@@ -68,22 +70,22 @@ function _ls_print(io::IO, entries::Vector{CacheEntry}, sizes::Dict{String,Int},
             println(io, "  [$(seq_str)]  $(label_str)$(miss_tag)")
         elseif detail == :normal
             println(io, "  [$(seq_str)]  $(_dt_str(k.datecached))  $(k.id[1:8])  $(label_str)$(miss_tag)")
-            print(io,   " "^prefix_len * k.path)
+            print(io, " "^prefix_len * k.path)
         elseif detail == :full
-            sz    = get(sizes, k.id, -1)
+            sz = get(sizes, k.id, -1)
             sz_str = sz >= 0 ? _fmt_size(sz) : "???"
             type_tag = uppercase(k.format)
             println(io, "  [$(seq_str)]  $(_dt_str(k.datecached))  $(k.id[1:8])  $(label_str)$(miss_tag)")
             da_str = k.dateaccessed == typemin(Dates.DateTime) ? "(never)" :
-                     Dates.format(k.dateaccessed, "yyyy-mm-ddTHH:MM:SS")
+                Dates.format(k.dateaccessed, "yyyy-mm-ddTHH:MM:SS")
             println(io, " "^prefix_len * "cached: $(_dt_str(k.datecached))  accessed: $(da_str)  $(sz_str)  $(type_tag)")
-            print(io,   " "^prefix_len * k.path)
+            print(io, " "^prefix_len * k.path)
         else
             error("Unknown detail level $(repr(detail)); expected :minimal, :normal, or :full")
         end
         i < n && println(io)
     end
-    println(io)
+    return println(io)
 end
 
 # =============================================================================
@@ -93,31 +95,33 @@ end
 # Shared filtering/sorting backend.  Returns (entries, sizes) where `sizes` is
 # populated only when `need_sizes` is true (required for :size/:size_desc sort
 # and for the :full display detail level).
-function _ls_select(cache::DataCache;
-                    pattern::Union{Nothing,Regex,AbstractString}             = nothing,
-                    filepath_pattern::Union{Nothing,Regex,AbstractString}    = nothing,
-                    filename_pattern::Union{Nothing,Regex,AbstractString}    = nothing,
-                    format::Union{Nothing,String,Regex}                      = nothing,
-                    before::Union{Nothing,Dates.DateTime}                    = nothing,
-                    after::Union{Nothing,Dates.DateTime}                     = nothing,
-                    accessed_before_date::Union{Nothing,Dates.DateTime}      = nothing,
-                    accessed_after_date::Union{Nothing,Dates.DateTime}       = nothing,
-                    labeled::Union{Nothing,Bool}                             = nothing,
-                    missing_file::Bool                                       = false,
-                    sortby::Symbol                                           = :seq,
-                    rev::Bool                                                = false,
-                    need_sizes::Bool                                         = false)
+function _ls_select(
+        cache::DataCache;
+        pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filepath_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filename_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        format::Union{Nothing, String, Regex} = nothing,
+        before::Union{Nothing, Dates.DateTime} = nothing,
+        after::Union{Nothing, Dates.DateTime} = nothing,
+        accessed_before_date::Union{Nothing, Dates.DateTime} = nothing,
+        accessed_after_date::Union{Nothing, Dates.DateTime} = nothing,
+        labeled::Union{Nothing, Bool} = nothing,
+        missing_file::Bool = false,
+        sortby::Symbol = :seq,
+        rev::Bool = false,
+        need_sizes::Bool = false
+    )
     entries = collect(values(cache._index))
 
     # --- Filter ---
-    pat    = pattern          isa AbstractString ? Regex(pattern)          :
-             pattern          isa Regex          ? pattern                 : nothing
+    pat = pattern isa AbstractString ? Regex(pattern) :
+        pattern isa Regex ? pattern : nothing
     fp_pat = filepath_pattern isa AbstractString ? Regex(filepath_pattern) :
-             filepath_pattern isa Regex          ? filepath_pattern        : nothing
+        filepath_pattern isa Regex ? filepath_pattern : nothing
     fn_pat = filename_pattern isa AbstractString ? Regex(filename_pattern) :
-             filename_pattern isa Regex          ? filename_pattern        : nothing
+        filename_pattern isa Regex ? filename_pattern : nothing
     fmt_pat = format isa AbstractString ? Regex(string("^", format, "\$")) :
-              format isa Regex          ? format                           : nothing
+        format isa Regex ? format : nothing
 
     filter!(entries) do k
         !missing_file && !isfile(k.path) && return false
@@ -138,8 +142,8 @@ function _ls_select(cache::DataCache;
             k.dateaccessed != typemin(Dates.DateTime) && k.dateaccessed <= accessed_after_date && return false
         end
         if !isnothing(pat)
-            target = !isempty(k.label)       ? k.label :
-                     !isempty(k.description) ? k.description : k.id
+            target = !isempty(k.label) ? k.label :
+                !isempty(k.description) ? k.description : k.id
             occursin(pat, target) || return false
         end
         if !isnothing(fp_pat)
@@ -156,9 +160,9 @@ function _ls_select(cache::DataCache;
 
     # --- Sizes (fetch only when needed) ---
     sizes = if need_sizes
-        Dict{String,Int}(k.id => (isfile(k.path) ? stat(k.path).size : -1) for k in entries)
+        Dict{String, Int}(k.id => (isfile(k.path) ? stat(k.path).size : -1) for k in entries)
     else
-        Dict{String,Int}()
+        Dict{String, Int}()
     end
 
     # --- Sort ---
@@ -183,8 +187,10 @@ function _ls_select(cache::DataCache;
         do_rev = !rev
         k -> get(sizes, k.id, -1)
     else
-        error("Unknown sortby $(repr(sortby)); expected :seq, :label, :date, :date_desc, " *
-              ":dateaccessed, :dateaccessed_desc, :size, or :size_desc")
+        error(
+            "Unknown sortby $(repr(sortby)); expected :seq, :label, :date, :date_desc, " *
+                ":dateaccessed, :dateaccessed_desc, :size, or :size_desc"
+        )
     end
     sort!(entries; by = sort_fn, rev = do_rev)
 
@@ -227,24 +233,28 @@ If `cache` is omitted, the active default cache is used (see `default_filecache(
 
 See also [`ls!`](@ref) for a display-oriented variant that prints to an `IO` stream.
 """
-function ls(cache::DataCache;
-            pattern::Union{Nothing,Regex,AbstractString}          = nothing,
-            filepath_pattern::Union{Nothing,Regex,AbstractString} = nothing,
-            filename_pattern::Union{Nothing,Regex,AbstractString} = nothing,
-            format::Union{Nothing,String,Regex}                   = nothing,
-            before::Union{Nothing,Dates.DateTime}                 = nothing,
-            after::Union{Nothing,Dates.DateTime}                  = nothing,
-            accessed_before_date::Union{Nothing,Dates.DateTime}   = nothing,
-            accessed_after_date::Union{Nothing,Dates.DateTime}    = nothing,
-            labeled::Union{Nothing,Bool}                          = nothing,
-            missing_file::Bool                                    = false,
-            sortby::Symbol                                        = :seq,
-            rev::Bool                                             = false)
-    entries, _ = _ls_select(cache;
-                            pattern, filepath_pattern, filename_pattern, format,
-                            before, after, accessed_before_date, accessed_after_date,
-                            labeled, missing_file, sortby, rev,
-                            need_sizes = sortby ∈ (:size, :size_desc))
+function ls(
+        cache::DataCache;
+        pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filepath_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filename_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        format::Union{Nothing, String, Regex} = nothing,
+        before::Union{Nothing, Dates.DateTime} = nothing,
+        after::Union{Nothing, Dates.DateTime} = nothing,
+        accessed_before_date::Union{Nothing, Dates.DateTime} = nothing,
+        accessed_after_date::Union{Nothing, Dates.DateTime} = nothing,
+        labeled::Union{Nothing, Bool} = nothing,
+        missing_file::Bool = false,
+        sortby::Symbol = :seq,
+        rev::Bool = false
+    )
+    entries, _ = _ls_select(
+        cache;
+        pattern, filepath_pattern, filename_pattern, format,
+        before, after, accessed_before_date, accessed_after_date,
+        labeled, missing_file, sortby, rev,
+        need_sizes = sortby ∈ (:size, :size_desc)
+    )
     return entries
 end
 
@@ -267,26 +277,30 @@ Accepts all the same filtering and sorting keyword arguments as [`ls`](@ref), pl
   - `:full` — all of `:normal` plus last-access time, file size, and data format
 - `io::IO = stdout`
 """
-function ls!(cache::DataCache;
-             detail::Symbol                                        = :normal,
-             pattern::Union{Nothing,Regex,AbstractString}          = nothing,
-             filepath_pattern::Union{Nothing,Regex,AbstractString} = nothing,
-             filename_pattern::Union{Nothing,Regex,AbstractString}  = nothing,
-             format::Union{Nothing,String,Regex}                    = nothing,
-             before::Union{Nothing,Dates.DateTime}                  = nothing,
-             after::Union{Nothing,Dates.DateTime}                   = nothing,
-             accessed_before_date::Union{Nothing,Dates.DateTime}    = nothing,
-             accessed_after_date::Union{Nothing,Dates.DateTime}     = nothing,
-             labeled::Union{Nothing,Bool}                           = nothing,
-             missing_file::Bool                                     = false,
-             sortby::Symbol                                         = :seq,
-             rev::Bool                                              = false,
-             io::IO                                                 = stdout)
-    entries, sizes = _ls_select(cache;
-                                pattern, filepath_pattern, filename_pattern, format,
-                                before, after, accessed_before_date, accessed_after_date,
-                                labeled, missing_file, sortby, rev,
-                                need_sizes = sortby ∈ (:size, :size_desc) || detail == :full)
+function ls!(
+        cache::DataCache;
+        detail::Symbol = :normal,
+        pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filepath_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filename_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        format::Union{Nothing, String, Regex} = nothing,
+        before::Union{Nothing, Dates.DateTime} = nothing,
+        after::Union{Nothing, Dates.DateTime} = nothing,
+        accessed_before_date::Union{Nothing, Dates.DateTime} = nothing,
+        accessed_after_date::Union{Nothing, Dates.DateTime} = nothing,
+        labeled::Union{Nothing, Bool} = nothing,
+        missing_file::Bool = false,
+        sortby::Symbol = :seq,
+        rev::Bool = false,
+        io::IO = stdout
+    )
+    entries, sizes = _ls_select(
+        cache;
+        pattern, filepath_pattern, filename_pattern, format,
+        before, after, accessed_before_date, accessed_after_date,
+        labeled, missing_file, sortby, rev,
+        need_sizes = sortby ∈ (:size, :size_desc) || detail == :full
+    )
     _ls_print(io, entries, sizes, detail)
     return nothing
 end
@@ -342,8 +356,8 @@ function rm(cache::DataCache, specs::AbstractVector; force::Bool = false)
     return cache
 end
 
-rm(assets...; kwargs...)                   = rm(default_filecache(), assets...; kwargs...)
-rm(specs::AbstractVector; kwargs...)       = rm(default_filecache(), specs; kwargs...)
+rm(assets...; kwargs...) = rm(default_filecache(), assets...; kwargs...)
+rm(specs::AbstractVector; kwargs...) = rm(default_filecache(), specs; kwargs...)
 
 # =============================================================================
 # mv — relabel within cache OR move to another cache
@@ -382,18 +396,22 @@ function mv(cache::DataCache, src, dest::AbstractString; force::Bool = false)
         _remove_entry!(cache, existing_id)
     end
     isempty(key.label) || delete!(cache._by_label, key.label)
-    new_key = CacheEntry(key.id, key.seq, dest, key.path, key.format, key.description,
-                        key.datecached, key.dateaccessed, key.ttl)
+    new_key = CacheEntry(
+        key.id, key.seq, dest, key.path, key.format, key.description,
+        key.datecached, key.dateaccessed, key.ttl
+    )
     cache._index[key.id] = new_key
     isempty(dest) || (cache._by_label[dest] = key.id)
     _save_index(cache)
     return new_key
 end
 
-function mv(src_cache::DataCache, src, dest_cache::DataCache;
-            label::AbstractString = "", force::Bool = false)
+function mv(
+        src_cache::DataCache, src, dest_cache::DataCache;
+        label::AbstractString = "", force::Bool = false
+    )
     src_cache === dest_cache && error("mv: source and destination caches are the same; use mv(cache, src, new_label) to relabel")
-    key       = _resolve(src_cache, src)
+    key = _resolve(src_cache, src)
     new_label = !isempty(label) ? label : key.label
     if !isempty(new_label) && haskey(dest_cache._by_label, new_label)
         force || error("Label $(repr(new_label)) already exists in destination cache; pass force=true to overwrite")
@@ -406,8 +424,8 @@ function mv(src_cache::DataCache, src, dest_cache::DataCache;
 end
 
 # Default-cache forms
-mv(src, dest::AbstractString; kwargs...)  = mv(default_filecache(), src, dest; kwargs...)
-mv(src, dest::DataCache; kwargs...)       = mv(default_filecache(), src, dest; kwargs...)
+mv(src, dest::AbstractString; kwargs...) = mv(default_filecache(), src, dest; kwargs...)
+mv(src, dest::DataCache; kwargs...) = mv(default_filecache(), src, dest; kwargs...)
 
 # =============================================================================
 # cp — copy assets to another cache
@@ -434,9 +452,11 @@ cache is allowed and produces a distinct new entry.
 
 If `src_cache` is omitted, `default_filecache()` is used as the source.
 """
-function cp(src_cache::DataCache, src, dest_cache::DataCache;
-            label::AbstractString = "", force::Bool = false)
-    key       = _resolve(src_cache, src)
+function cp(
+        src_cache::DataCache, src, dest_cache::DataCache;
+        label::AbstractString = "", force::Bool = false
+    )
+    key = _resolve(src_cache, src)
     new_label = !isempty(label) ? label : key.label
     if !isempty(new_label) && haskey(dest_cache._by_label, new_label)
         force || error("Label $(repr(new_label)) already exists in destination cache; pass force=true to overwrite")
@@ -445,8 +465,10 @@ function cp(src_cache::DataCache, src, dest_cache::DataCache;
     return write!(dest_cache, data; label = new_label, description = key.description)
 end
 
-function cp(src_cache::DataCache, srcs::AbstractVector, dest_cache::DataCache;
-            force::Bool = false)
+function cp(
+        src_cache::DataCache, srcs::AbstractVector, dest_cache::DataCache;
+        force::Bool = false
+    )
     isempty(srcs) && error("cp: at least one source specifier is required")
     results = CacheEntry[]
     for src in srcs
@@ -462,8 +484,8 @@ function cp(src_cache::DataCache, srcs::AbstractVector, dest_cache::DataCache;
 end
 
 # Default-cache forms
-cp(src, dest_cache::DataCache; kwargs...)                    = cp(default_filecache(), src, dest_cache; kwargs...)
-cp(srcs::AbstractVector, dest_cache::DataCache; kwargs...)   = cp(default_filecache(), srcs, dest_cache; kwargs...)
+cp(src, dest_cache::DataCache; kwargs...) = cp(default_filecache(), src, dest_cache; kwargs...)
+cp(srcs::AbstractVector, dest_cache::DataCache; kwargs...) = cp(default_filecache(), srcs, dest_cache; kwargs...)
 
 # =============================================================================
 # purge! — bulk deletion with rich criteria
@@ -531,33 +553,37 @@ CacheAssets.purge!(; keep_count = 50)
 See also [`ls`](@ref), [`rm`](@ref), [`DataCaches.invalidate!`](@ref),
 [`DataCaches.set_autopurge!`](@ref).
 """
-function purge!(cache::DataCache;
-                stale::Bool                                           = false,
-                max_age::Union{Nothing,Dates.Period}                  = nothing,
-                max_idle::Union{Nothing,Dates.Period}                 = nothing,
-                keep_count::Union{Nothing,Int}                        = nothing,
-                max_size_bytes::Union{Nothing,Int}                    = nothing,
-                keep_labeled::Bool                                    = false,
-                dry_run::Bool                                         = false,
-                io::IO                                                = stdout,
-                pattern::Union{Nothing,Regex,AbstractString}          = nothing,
-                filepath_pattern::Union{Nothing,Regex,AbstractString} = nothing,
-                filename_pattern::Union{Nothing,Regex,AbstractString} = nothing,
-                format::Union{Nothing,String,Regex}                   = nothing,
-                before::Union{Nothing,Dates.DateTime}                 = nothing,
-                after::Union{Nothing,Dates.DateTime}                  = nothing,
-                accessed_before_date::Union{Nothing,Dates.DateTime}   = nothing,
-                accessed_after_date::Union{Nothing,Dates.DateTime}    = nothing,
-                labeled::Union{Nothing,Bool}                          = nothing,
-                missing_file::Bool                                    = false,
-                sortby::Symbol                                        = :seq,
-                rev::Bool                                             = false)::DataCache
+function purge!(
+        cache::DataCache;
+        stale::Bool = false,
+        max_age::Union{Nothing, Dates.Period} = nothing,
+        max_idle::Union{Nothing, Dates.Period} = nothing,
+        keep_count::Union{Nothing, Int} = nothing,
+        max_size_bytes::Union{Nothing, Int} = nothing,
+        keep_labeled::Bool = false,
+        dry_run::Bool = false,
+        io::IO = stdout,
+        pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filepath_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filename_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        format::Union{Nothing, String, Regex} = nothing,
+        before::Union{Nothing, Dates.DateTime} = nothing,
+        after::Union{Nothing, Dates.DateTime} = nothing,
+        accessed_before_date::Union{Nothing, Dates.DateTime} = nothing,
+        accessed_after_date::Union{Nothing, Dates.DateTime} = nothing,
+        labeled::Union{Nothing, Bool} = nothing,
+        missing_file::Bool = false,
+        sortby::Symbol = :seq,
+        rev::Bool = false
+    )::DataCache
     need_sizes = !isnothing(max_size_bytes)
-    candidates, sizes = _ls_select(cache;
-                                   pattern, filepath_pattern, filename_pattern, format,
-                                   before, after, accessed_before_date, accessed_after_date,
-                                   labeled, missing_file, sortby, rev,
-                                   need_sizes)
+    candidates, sizes = _ls_select(
+        cache;
+        pattern, filepath_pattern, filename_pattern, format,
+        before, after, accessed_before_date, accessed_after_date,
+        labeled, missing_file, sortby, rev,
+        need_sizes
+    )
 
     # Apply keep_labeled: remove labeled entries from the candidates set
     if keep_labeled
@@ -594,10 +620,12 @@ function purge!(cache::DataCache;
 
     # keep_count: delete LRU entries beyond the top-N most recently accessed
     if !isnothing(keep_count) && keep_count < length(candidates)
-        sorted_by_access = sort(candidates;
-                                by = e -> e.dateaccessed,
-                                rev = true)  # most recently accessed first
-        for e in sorted_by_access[keep_count + 1:end]
+        sorted_by_access = sort(
+            candidates;
+            by = e -> e.dateaccessed,
+            rev = true
+        )  # most recently accessed first
+        for e in sorted_by_access[(keep_count + 1):end]
             push!(to_delete, e.id)
         end
     end
@@ -605,10 +633,14 @@ function purge!(cache::DataCache;
     # max_size_bytes: purge LRU entries until total remaining size ≤ limit
     if !isnothing(max_size_bytes)
         # Compute sizes for all candidates (use the sizes dict if already computed)
-        sorted_lru = sort(candidates;
-                          by = e -> e.dateaccessed)  # least recently accessed first
-        total_bytes = sum(get(sizes, e.id, isfile(e.path) ? stat(e.path).size : 0)
-                          for e in candidates; init = 0)
+        sorted_lru = sort(
+            candidates;
+            by = e -> e.dateaccessed
+        )  # least recently accessed first
+        total_bytes = sum(
+            get(sizes, e.id, isfile(e.path) ? stat(e.path).size : 0)
+                for e in candidates; init = 0
+        )
         for e in sorted_lru
             total_bytes <= max_size_bytes && break
             push!(to_delete, e.id)

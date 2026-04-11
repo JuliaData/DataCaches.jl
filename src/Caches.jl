@@ -4,15 +4,15 @@ module Caches
 const _UUID = Base.UUID("c1455f2b-6d6f-4f37-b463-919f923708a5")
 
 function _root()
-    joinpath(first(Base.DEPOT_PATH), "scratchspaces", string(_UUID))
+    return joinpath(first(Base.DEPOT_PATH), "scratchspaces", string(_UUID))
 end
 
 # Set by DataCaches after include("Caches.jl") to break the forward-reference cycle.
 const _datacache_ctor = Ref{Any}(nothing)
 
-_caches_dir()      = joinpath(_root(), "caches")
-_user_dir()        = joinpath(_caches_dir(), "user")
-_module_dir()      = joinpath(_caches_dir(), "module")
+_caches_dir() = joinpath(_root(), "caches")
+_user_dir() = joinpath(_caches_dir(), "user")
+_module_dir() = joinpath(_caches_dir(), "module")
 
 """
     DataCaches.Caches.pwd() → String
@@ -73,7 +73,7 @@ function ls(storetype::Symbol = :root)
         dir = _user_dir()
         isdir(dir) || return Symbol[]
         result = [Symbol(n) for n in readdir(dir) if isdir(joinpath(dir, n))]
-        @debug "Caches.ls" storetype=:user paths=joinpath.(_user_dir(), string.(result))
+        @debug "Caches.ls" storetype = :user paths = joinpath.(_user_dir(), string.(result))
         return result
     elseif storetype === :module
         dir = _module_dir()
@@ -86,13 +86,13 @@ function ls(storetype::Symbol = :root)
                 isdir(joinpath(full_uuid, key)) && push!(result, Symbol("$uuid_dir/$key"))
             end
         end
-        @debug "Caches.ls" storetype=:module count=length(result)
+        @debug "Caches.ls" storetype = :module count = length(result)
         return result
     elseif storetype === :root
         dir = _caches_dir()
         isdir(dir) || return Symbol[]
         result = [Symbol(n) for n in readdir(dir) if isdir(joinpath(dir, n))]
-        @debug "Caches.ls" storetype=:root paths=joinpath.(dir, string.(result))
+        @debug "Caches.ls" storetype = :root paths = joinpath.(dir, string.(result))
         return result
     else
         error("Unknown storetype $(repr(storetype)); expected :root, :user, or :module")
@@ -132,8 +132,8 @@ function rm(name::Symbol; force::Bool = false)
         force && return
         error("No cache named $(repr(name))")
     end
-    @debug "Caches.rm" path=path
-    Base.rm(path; recursive=true)
+    @debug "Caches.rm" path = path
+    return Base.rm(path; recursive = true)
 end
 
 """
@@ -156,8 +156,8 @@ function mv(src::Symbol, dst::Symbol)
     dst_path = pwd(dst)
     isdir(src_path) || error("No cache named $(repr(src))")
     isdir(dst_path) && error("Cache $(repr(dst)) already exists")
-    @debug "Caches.mv" src=src_path dst=dst_path
-    Base.mv(src_path, dst_path)
+    @debug "Caches.mv" src = src_path dst = dst_path
+    return Base.mv(src_path, dst_path)
 end
 
 function mv(src::Symbol, dst::AbstractString)
@@ -166,8 +166,8 @@ function mv(src::Symbol, dst::AbstractString)
     dst_path = abspath(dst)
     isdir(dst_path) && error("Destination already exists: $(repr(dst_path))")
     mkpath(dirname(dst_path))
-    @debug "Caches.mv" src=src_path dst=dst_path
-    Base.mv(src_path, dst_path)
+    @debug "Caches.mv" src = src_path dst = dst_path
+    return Base.mv(src_path, dst_path)
 end
 
 function mv(src::AbstractString, dst::Symbol)
@@ -176,8 +176,8 @@ function mv(src::AbstractString, dst::Symbol)
     dst_path = pwd(dst)
     isdir(dst_path) && error("Cache $(repr(dst)) already exists")
     mkpath(dirname(dst_path))
-    @debug "Caches.mv" src=src_path dst=dst_path
-    Base.mv(src_path, dst_path)
+    @debug "Caches.mv" src = src_path dst = dst_path
+    return Base.mv(src_path, dst_path)
 end
 
 """
@@ -200,8 +200,8 @@ function cp(src::Symbol, dst::Symbol)
     dst_path = pwd(dst)
     isdir(src_path) || error("No cache named $(repr(src))")
     isdir(dst_path) && error("Cache $(repr(dst)) already exists")
-    @debug "Caches.cp" src=src_path dst=dst_path
-    Base.cp(src_path, dst_path)
+    @debug "Caches.cp" src = src_path dst = dst_path
+    return Base.cp(src_path, dst_path)
 end
 
 function cp(src::Symbol, dst::AbstractString)
@@ -210,8 +210,8 @@ function cp(src::Symbol, dst::AbstractString)
     dst_path = abspath(dst)
     isdir(dst_path) && error("Destination already exists: $(repr(dst_path))")
     mkpath(dirname(dst_path))
-    @debug "Caches.cp" src=src_path dst=dst_path
-    Base.cp(src_path, dst_path)
+    @debug "Caches.cp" src = src_path dst = dst_path
+    return Base.cp(src_path, dst_path)
 end
 
 function cp(src::AbstractString, dst::Symbol)
@@ -220,8 +220,8 @@ function cp(src::AbstractString, dst::Symbol)
     dst_path = pwd(dst)
     isdir(dst_path) && error("Cache $(repr(dst)) already exists")
     mkpath(dirname(dst_path))
-    @debug "Caches.cp" src=src_path dst=dst_path
-    Base.cp(src_path, dst_path)
+    @debug "Caches.cp" src = src_path dst = dst_path
+    return Base.cp(src_path, dst_path)
 end
 
 end # module Caches

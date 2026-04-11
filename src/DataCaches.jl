@@ -45,21 +45,21 @@ abstract type CacheSerializer end
 # --- Built-in serializers ----------------------------------------------------
 
 struct OpaqueSerializer <: CacheSerializer end
-format_tag(::OpaqueSerializer)      = "jls"
-file_extension(::OpaqueSerializer)  = ".jls"
+format_tag(::OpaqueSerializer) = "jls"
+file_extension(::OpaqueSerializer) = ".jls"
 write_data(::OpaqueSerializer, fpath::String, data) =
     open(io -> serialize(io, data), fpath, "w")
 read_data(::OpaqueSerializer, fpath::String) = open(deserialize, fpath)
 
 struct CSVSerializer <: CacheSerializer end
-format_tag(::CSVSerializer)     = "csv"
+format_tag(::CSVSerializer) = "csv"
 file_extension(::CSVSerializer) = ".csv"
 write_data(::CSVSerializer, fpath::String, data) = CSV.write(fpath, data)
 read_data(::CSVSerializer, fpath::String) =
     DataFrame(CSV.File(fpath; normalizenames = true))
 
 struct JSONSerializer <: CacheSerializer end
-format_tag(::JSONSerializer)     = "json"
+format_tag(::JSONSerializer) = "json"
 file_extension(::JSONSerializer) = ".json"
 write_data(::JSONSerializer, fpath::String, data) =
     open(io -> JSON3.write(io, data), fpath, "w")
@@ -82,8 +82,8 @@ Populated at module load with built-in serializers; extensions add entries
 via [`register_serializer!`](@ref).
 """
 const SERIALIZER_REGISTRY = Dict{String, CacheSerializer}(
-    "csv"  => CSVSerializer(),
-    "jls"  => OpaqueSerializer(),
+    "csv" => CSVSerializer(),
+    "jls" => OpaqueSerializer(),
     "json" => JSONSerializer(),
 )
 
@@ -119,7 +119,7 @@ function serializer_for(data)
     return OpaqueSerializer()
 end
 serializer_for(::AbstractDataFrame) = CSVSerializer()
-serializer_for(::NamedTuple)        = JSONSerializer()
+serializer_for(::NamedTuple) = JSONSerializer()
 
 # --- Format inference for legacy TOML entries (no format field) --------------
 
@@ -161,10 +161,10 @@ Fields:
 See [`set_autopurge!`](@ref) and [`DataCaches.CacheAssets.purge!`](@ref).
 """
 struct PurgePolicy
-    max_age::Union{Nothing,Period}
-    max_idle::Union{Nothing,Period}
-    keep_count::Union{Nothing,Int}
-    max_size_bytes::Union{Nothing,Int}
+    max_age::Union{Nothing, Period}
+    max_idle::Union{Nothing, Period}
+    keep_count::Union{Nothing, Int}
+    max_size_bytes::Union{Nothing, Int}
     keep_labeled::Bool
 end
 
@@ -204,45 +204,47 @@ struct CacheEntry
     description::String   # human-readable source expression, or ""
     datecached::DateTime  # timestamp of last write; typemin(DateTime) = unknown (legacy entry)
     dateaccessed::DateTime # timestamp of last read; typemin(DateTime) = never accessed
-    ttl::Union{Nothing,Period}  # time-to-live; nothing = no expiry
+    ttl::Union{Nothing, Period}  # time-to-live; nothing = no expiry
 end
 
 # Backward-compatible alias; will gain a deprecation warning in a future release.
 const CacheKey = CacheEntry
 
 function Base.show(io::IO, e::CacheEntry)
-    dt_cached   = e.datecached   == typemin(DateTime) ? "(unknown)" : Dates.format(e.datecached,   "yyyy-mm-ddTHH:MM:SS")
-    dt_accessed = e.dateaccessed == typemin(DateTime) ? "(never)"   : Dates.format(e.dateaccessed, "yyyy-mm-ddTHH:MM:SS")
-    label_str = !isempty(e.label)       ? repr(e.label)       : "(none)"
-    desc_str  = !isempty(e.description) ? repr(e.description) : "(none)"
-    status    = isfile(e.path) ? "" : "  *** FILE MISSING ***"
-    print(io, "CacheEntry(\n" *
-              "  seq=$(e.seq)  id=$(e.id[1:8])…  format=$(repr(e.format))$status\n" *
-              "  label=$(label_str)\n" *
-              "  description=$(desc_str)\n" *
-              "  datecached=$(dt_cached)  dateaccessed=$(dt_accessed)\n" *
-              "  path=$(repr(e.path))\n" *
-              ")")
+    dt_cached = e.datecached == typemin(DateTime) ? "(unknown)" : Dates.format(e.datecached, "yyyy-mm-ddTHH:MM:SS")
+    dt_accessed = e.dateaccessed == typemin(DateTime) ? "(never)" : Dates.format(e.dateaccessed, "yyyy-mm-ddTHH:MM:SS")
+    label_str = !isempty(e.label) ? repr(e.label) : "(none)"
+    desc_str = !isempty(e.description) ? repr(e.description) : "(none)"
+    status = isfile(e.path) ? "" : "  *** FILE MISSING ***"
+    return print(
+        io, "CacheEntry(\n" *
+            "  seq=$(e.seq)  id=$(e.id[1:8])…  format=$(repr(e.format))$status\n" *
+            "  label=$(label_str)\n" *
+            "  description=$(desc_str)\n" *
+            "  datecached=$(dt_cached)  dateaccessed=$(dt_accessed)\n" *
+            "  path=$(repr(e.path))\n" *
+            ")"
+    )
 end
 
 # Internal: format one CacheEntry line with a given seq column width for alignment.
 function _print_cacheentry(io::IO, e::CacheEntry, seq_width::Int)
-    lbl    = !isempty(e.description) ? e.description :
-             !isempty(e.label)       ? e.label       : "(unlabeled)"
+    lbl = !isempty(e.description) ? e.description :
+        !isempty(e.label) ? e.label : "(unlabeled)"
     dt_str = e.datecached == typemin(DateTime) ?
-             " " ^ 19 :
-             Dates.format(e.datecached, "yyyy-mm-ddTHH:MM:SS")
+        " "^19 :
+        Dates.format(e.datecached, "yyyy-mm-ddTHH:MM:SS")
     status = isfile(e.path) ? "" : "  *** FILE MISSING ***"
     seq_str = lpad(e.seq, seq_width)
     # prefix: "  [" + seq_str + "]  " + dt_str + "  " + uuid8 + "  "
     #          3   + seq_width + 3  +   19    +  2  +   8   +  2  = seq_width + 37
     prefix_len = seq_width + 37
     println(io, "  [$(seq_str)]  $(dt_str)  $(e.id[1:8])  $lbl$status")
-    print(io,   " " ^ prefix_len * e.path)
+    return print(io, " "^prefix_len * e.path)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", e::CacheEntry)
-    _print_cacheentry(io, e, ndigits(e.seq))
+    return _print_cacheentry(io, e, ndigits(e.seq))
 end
 
 # =============================================================================
@@ -331,12 +333,12 @@ showcache(cache)
 """
 mutable struct DataCache
     store::String
-    _index::Dict{String,CacheEntry}  # id → CacheEntry
-    _by_label::Dict{String,String}   # label → id
+    _index::Dict{String, CacheEntry}  # id → CacheEntry
+    _by_label::Dict{String, String}   # label → id
     _next_seq::Int                   # monotonically incrementing seq counter
     track_access::Bool               # record dateaccessed on every read (opt-out with false)
-    default_ttl::Union{Nothing,Period}              # cache-level default TTL; persisted in TOML
-    _autopurge_policy::Union{Nothing,PurgePolicy}   # runtime autopurge policy; not persisted
+    default_ttl::Union{Nothing, Period}              # cache-level default TTL; persisted in TOML
+    _autopurge_policy::Union{Nothing, PurgePolicy}   # runtime autopurge policy; not persisted
 end
 
 const _INDEX_FILENAME = "cache_index.toml"
@@ -349,12 +351,14 @@ function _default_cache_dir()
     return store
 end
 
-function DataCache(store::AbstractString = _default_cache_dir();
-                   track_access::Bool = true,
-                   default_ttl::Union{Nothing,Period} = nothing)
+function DataCache(
+        store::AbstractString = _default_cache_dir();
+        track_access::Bool = true,
+        default_ttl::Union{Nothing, Period} = nothing
+    )
     store = abspath(store)
     mkpath(store)
-    cache = DataCache(store, Dict{String,CacheEntry}(), Dict{String,String}(), 1, track_access, nothing, nothing)
+    cache = DataCache(store, Dict{String, CacheEntry}(), Dict{String, String}(), 1, track_access, nothing, nothing)
     _load_index!(cache)
     # Constructor kwarg overrides any persisted default_ttl
     if !isnothing(default_ttl)
@@ -363,7 +367,7 @@ function DataCache(store::AbstractString = _default_cache_dir();
     return cache
 end
 
-function DataCache(key::Symbol; track_access::Bool = true, default_ttl::Union{Nothing,Period} = nothing)
+function DataCache(key::Symbol; track_access::Bool = true, default_ttl::Union{Nothing, Period} = nothing)
     store = joinpath(Caches._user_dir(), string(key))
     return DataCache(store; track_access, default_ttl)
 end
@@ -395,9 +399,11 @@ get_cache() = _CACHE[]
 end
 ```
 """
-function scratch_datacache!(pkg_uuid::Base.UUID, key::Symbol = :datacache;
-                            track_access::Bool = true,
-                            default_ttl::Union{Nothing,Period} = nothing)
+function scratch_datacache!(
+        pkg_uuid::Base.UUID, key::Symbol = :datacache;
+        track_access::Bool = true,
+        default_ttl::Union{Nothing, Period} = nothing
+    )
     store = joinpath(Caches._module_dir(), string(pkg_uuid), string(key))
     mkpath(store)
     return DataCache(store; track_access, default_ttl)
@@ -417,39 +423,39 @@ function _load_index!(cache::DataCache)
     if ttl_cfg isa Integer && ttl_cfg > 0
         cache.default_ttl = _seconds_to_period(ttl_cfg)
     end
-    legacy = Tuple{String,String,String,String,String,DateTime,DateTime,Union{Nothing,Period}}[]
+    legacy = Tuple{String, String, String, String, String, DateTime, DateTime, Union{Nothing, Period}}[]
     max_seq = 0
     for (id, entry) in get(data, "entries", Dict())
-        lbl    = get(entry, "label",       "")
-        fpath  = get(entry, "path",        "")
-        fpath  = isabspath(fpath) ? fpath : joinpath(cache.store, fpath)
-        desc   = get(entry, "description", "")
-        seq    = get(entry, "seq",         0)
-        dt_raw = get(entry, "datecached",  "")
+        lbl = get(entry, "label", "")
+        fpath = get(entry, "path", "")
+        fpath = isabspath(fpath) ? fpath : joinpath(cache.store, fpath)
+        desc = get(entry, "description", "")
+        seq = get(entry, "seq", 0)
+        dt_raw = get(entry, "datecached", "")
         dt = if dt_raw isa DateTime
-                 dt_raw
-             elseif dt_raw isa AbstractString && !isempty(dt_raw)
-                 try
-                     DateTime(dt_raw, dateformat"yyyy-mm-ddTHH:MM:SS")
-                 catch
-                     typemin(DateTime)
-                 end
-             else
-                 typemin(DateTime)
-             end
+            dt_raw
+        elseif dt_raw isa AbstractString && !isempty(dt_raw)
+            try
+                DateTime(dt_raw, dateformat"yyyy-mm-ddTHH:MM:SS")
+            catch
+                typemin(DateTime)
+            end
+        else
+            typemin(DateTime)
+        end
         isfile(fpath) || continue
         da_raw = get(entry, "dateaccessed", "")
         da = if da_raw isa DateTime
-                 da_raw
-             elseif da_raw isa AbstractString && !isempty(da_raw)
-                 try
-                     DateTime(da_raw, dateformat"yyyy-mm-ddTHH:MM:SS")
-                 catch
-                     typemin(DateTime)
-                 end
-             else
-                 typemin(DateTime)
-             end
+            da_raw
+        elseif da_raw isa AbstractString && !isempty(da_raw)
+            try
+                DateTime(da_raw, dateformat"yyyy-mm-ddTHH:MM:SS")
+            catch
+                typemin(DateTime)
+            end
+        else
+            typemin(DateTime)
+        end
         fmt = get(entry, "format", _infer_format_from_path(fpath))
         ttl_raw = get(entry, "ttl_seconds", nothing)
         ttl = ttl_raw isa Integer && ttl_raw > 0 ? _seconds_to_period(ttl_raw) : nothing
@@ -470,32 +476,32 @@ function _load_index!(cache::DataCache)
         cache._index[id] = key
         isempty(lbl) || (cache._by_label[lbl] = id)
     end
-    cache._next_seq = max_seq + 1
+    return cache._next_seq = max_seq + 1
 end
 
 function _save_index(cache::DataCache)
-    entries = Dict{String,Any}()
+    entries = Dict{String, Any}()
     for (id, key) in cache._index
-        entries[id] = Dict{String,Any}(
-            "seq"          => key.seq,
-            "label"        => key.label,
-            "path"         => relpath(key.path, cache.store),
-            "format"       => key.format,
-            "description"  => key.description,
-            "datecached"   => key.datecached == typemin(DateTime) ? "" :
-                              Dates.format(key.datecached, "yyyy-mm-ddTHH:MM:SS"),
+        entries[id] = Dict{String, Any}(
+            "seq" => key.seq,
+            "label" => key.label,
+            "path" => relpath(key.path, cache.store),
+            "format" => key.format,
+            "description" => key.description,
+            "datecached" => key.datecached == typemin(DateTime) ? "" :
+                Dates.format(key.datecached, "yyyy-mm-ddTHH:MM:SS"),
             "dateaccessed" => key.dateaccessed == typemin(DateTime) ? "" :
-                              Dates.format(key.dateaccessed, "yyyy-mm-ddTHH:MM:SS"),
-            "ttl_seconds"  => isnothing(key.ttl) ? "" : _period_to_seconds(key.ttl),
+                Dates.format(key.dateaccessed, "yyyy-mm-ddTHH:MM:SS"),
+            "ttl_seconds" => isnothing(key.ttl) ? "" : _period_to_seconds(key.ttl),
         )
     end
-    toml_data = Dict{String,Any}("entries" => entries)
+    toml_data = Dict{String, Any}("entries" => entries)
     if !isnothing(cache.default_ttl)
-        toml_data["cache_config"] = Dict{String,Any}(
+        toml_data["cache_config"] = Dict{String, Any}(
             "default_ttl_seconds" => _period_to_seconds(cache.default_ttl),
         )
     end
-    open(_index_file(cache), "w") do io
+    return open(_index_file(cache), "w") do io
         TOML.print(io, toml_data)
     end
 end
@@ -518,7 +524,7 @@ function _remove_entry!(cache::DataCache, id::String)
     isnothing(key) && return
     isfile(key.path) && rm(key.path; force = true)
     delete!(cache._index, id)
-    isempty(key.label) || delete!(cache._by_label, key.label)
+    return isempty(key.label) || delete!(cache._by_label, key.label)
 end
 
 # --- Public write/read -------------------------------------------------------
@@ -545,18 +551,20 @@ The returned [`CacheEntry`](@ref) can be passed directly to [`read`](@ref),
 [`delete!`](@ref), [`relabel!`](@ref), and related functions, or retrieved
 later by label using [`entry`](@ref).
 """
-function write!(cache::DataCache, data;
-                label::AbstractString       = "",
-                description::AbstractString = "",
-                format::Union{String,Nothing} = nothing,
-                ttl::Union{Nothing,Period} = nothing)
+function write!(
+        cache::DataCache, data;
+        label::AbstractString = "",
+        description::AbstractString = "",
+        format::Union{String, Nothing} = nothing,
+        ttl::Union{Nothing, Period} = nothing
+    )
     s = if isnothing(format)
-            serializer_for(data)
-        else
-            get(SERIALIZER_REGISTRY, format, OpaqueSerializer())
-        end
-    id    = string(uuid4())
-    seq   = cache._next_seq
+        serializer_for(data)
+    else
+        get(SERIALIZER_REGISTRY, format, OpaqueSerializer())
+    end
+    id = string(uuid4())
+    seq = cache._next_seq
     cache._next_seq += 1
     fpath = _data_path(cache, id, s)
     write_data(s, fpath, data)
@@ -585,8 +593,10 @@ function Base.read(cache::DataCache, key::CacheEntry)
     isfile(key.path) || error("Cache file missing: $(key.path)")
     data = _read_file(key)
     if cache.track_access
-        new_key = CacheEntry(key.id, key.seq, key.label, key.path, key.format, key.description,
-                           key.datecached, Dates.now(), key.ttl)
+        new_key = CacheEntry(
+            key.id, key.seq, key.label, key.path, key.format, key.description,
+            key.datecached, Dates.now(), key.ttl
+        )
         cache._index[key.id] = new_key
         _save_index(cache)
     end
@@ -606,15 +616,15 @@ function Base.read(cache::DataCache, n::Integer)
 end
 
 Base.getindex(cache::DataCache, lbl::AbstractString) = Base.read(cache, lbl)
-Base.getindex(cache::DataCache, key::CacheEntry)        = Base.read(cache, key)
-Base.getindex(cache::DataCache, n::Integer)           = Base.read(cache, n)
+Base.getindex(cache::DataCache, key::CacheEntry) = Base.read(cache, key)
+Base.getindex(cache::DataCache, n::Integer) = Base.read(cache, n)
 Base.setindex!(cache::DataCache, data, lbl::AbstractString) = write!(cache, data; label = lbl)
 
 # --- Introspection -----------------------------------------------------------
 
 Base.haskey(cache::DataCache, lbl::AbstractString) = haskey(cache._by_label, lbl)
-Base.haskey(cache::DataCache, key::CacheEntry)        = haskey(cache._index, key.id)
-Base.length(cache::DataCache)  = length(cache._index)
+Base.haskey(cache::DataCache, key::CacheEntry) = haskey(cache._index, key.id)
+Base.length(cache::DataCache) = length(cache._index)
 Base.isempty(cache::DataCache) = isempty(cache._index)
 
 """
@@ -752,8 +762,10 @@ function _relabel_by_id!(cache::DataCache, id::String, new_label::AbstractString
         error("Label $(repr(new_label)) is already used by another cache entry")
     end
     isempty(current.label) || delete!(cache._by_label, current.label)
-    new_key = CacheEntry(id, current.seq, new_label, current.path, current.format, current.description,
-                       current.datecached, current.dateaccessed, current.ttl)
+    new_key = CacheEntry(
+        id, current.seq, new_label, current.path, current.format, current.description,
+        current.datecached, current.dateaccessed, current.ttl
+    )
     cache._index[id] = new_key
     isempty(new_label) || (cache._by_label[new_label] = id)
     _save_index(cache)
@@ -826,8 +838,10 @@ Use this after many write/delete cycles to keep index numbers manageable.
 function reindexcache!(cache::DataCache)
     sorted = sort(collect(values(cache._index)); by = k -> k.seq)
     for (new_seq, key) in enumerate(sorted)
-        new_key = CacheEntry(key.id, new_seq, key.label, key.path, key.format, key.description,
-                           key.datecached, key.dateaccessed, key.ttl)
+        new_key = CacheEntry(
+            key.id, new_seq, key.label, key.path, key.format, key.description,
+            key.datecached, key.dateaccessed, key.ttl
+        )
         cache._index[key.id] = new_key
     end
     cache._next_seq = length(sorted) + 1
@@ -883,8 +897,8 @@ function isstale(cache::DataCache, label::AbstractString)::Bool
     return isstale(cache, cache._index[id])
 end
 
-isstale(entry::CacheEntry)::Bool      = isstale(default_filecache(), entry)
-isstale(label::AbstractString)::Bool  = isstale(default_filecache(), label)
+isstale(entry::CacheEntry)::Bool = isstale(default_filecache(), entry)
+isstale(label::AbstractString)::Bool = isstale(default_filecache(), label)
 
 # =============================================================================
 # invalidate! — bulk deletion by criteria
@@ -945,24 +959,28 @@ invalidate!(dc; stale = true, dry_run = true)
 
 See also: [`isstale`](@ref), [`DataCaches.CacheAssets.purge!`](@ref).
 """
-function invalidate!(cache::DataCache;
-                     pattern::Union{Nothing,Regex,AbstractString}          = nothing,
-                     filepath_pattern::Union{Nothing,Regex,AbstractString} = nothing,
-                     filename_pattern::Union{Nothing,Regex,AbstractString} = nothing,
-                     format::Union{Nothing,String,Regex}                   = nothing,
-                     before::Union{Nothing,DateTime}                       = nothing,
-                     after::Union{Nothing,DateTime}                        = nothing,
-                     accessed_before_date::Union{Nothing,DateTime}         = nothing,
-                     accessed_after_date::Union{Nothing,DateTime}          = nothing,
-                     labeled::Union{Nothing,Bool}                          = nothing,
-                     stale::Bool                                           = false,
-                     predicate::Union{Nothing,Function}                    = nothing,
-                     dry_run::Bool                                         = false,
-                     io::IO                                                = stdout)::DataCache
-    candidates, _ = CacheAssets._ls_select(cache;
-                                           pattern, filepath_pattern, filename_pattern, format,
-                                           before, after, accessed_before_date, accessed_after_date,
-                                           labeled, missing_file = false, sortby = :seq, rev = false)
+function invalidate!(
+        cache::DataCache;
+        pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filepath_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        filename_pattern::Union{Nothing, Regex, AbstractString} = nothing,
+        format::Union{Nothing, String, Regex} = nothing,
+        before::Union{Nothing, DateTime} = nothing,
+        after::Union{Nothing, DateTime} = nothing,
+        accessed_before_date::Union{Nothing, DateTime} = nothing,
+        accessed_after_date::Union{Nothing, DateTime} = nothing,
+        labeled::Union{Nothing, Bool} = nothing,
+        stale::Bool = false,
+        predicate::Union{Nothing, Function} = nothing,
+        dry_run::Bool = false,
+        io::IO = stdout
+    )::DataCache
+    candidates, _ = CacheAssets._ls_select(
+        cache;
+        pattern, filepath_pattern, filename_pattern, format,
+        before, after, accessed_before_date, accessed_after_date,
+        labeled, missing_file = false, sortby = :seq, rev = false
+    )
     stale && filter!(e -> isstale(cache, e), candidates)
     !isnothing(predicate) && filter!(predicate, candidates)
     if dry_run
@@ -1026,13 +1044,15 @@ set_autopurge!(dc; enabled = false)
 
 See also: [`DataCaches.CacheAssets.purge!`](@ref), [`invalidate!`](@ref).
 """
-function set_autopurge!(cache::DataCache;
-                        enabled::Bool                      = true,
-                        max_age::Union{Nothing,Period}     = nothing,
-                        max_idle::Union{Nothing,Period}    = nothing,
-                        keep_count::Union{Nothing,Int}     = nothing,
-                        max_size_bytes::Union{Nothing,Int} = nothing,
-                        keep_labeled::Bool                 = false)::DataCache
+function set_autopurge!(
+        cache::DataCache;
+        enabled::Bool = true,
+        max_age::Union{Nothing, Period} = nothing,
+        max_idle::Union{Nothing, Period} = nothing,
+        keep_count::Union{Nothing, Int} = nothing,
+        max_size_bytes::Union{Nothing, Int} = nothing,
+        keep_labeled::Bool = false
+    )::DataCache
     if !enabled
         cache._autopurge_policy = nothing
         return cache
@@ -1047,12 +1067,14 @@ set_autopurge!(; kwargs...)::DataCache = set_autopurge!(default_filecache(); kwa
 function _run_autopurge!(cache::DataCache)::Nothing
     p = cache._autopurge_policy
     isnothing(p) && return nothing
-    CacheAssets.purge!(cache;
-                       max_age        = p.max_age,
-                       max_idle       = p.max_idle,
-                       keep_count     = p.keep_count,
-                       max_size_bytes = p.max_size_bytes,
-                       keep_labeled   = p.keep_labeled)
+    CacheAssets.purge!(
+        cache;
+        max_age = p.max_age,
+        max_idle = p.max_idle,
+        keep_count = p.keep_count,
+        max_size_bytes = p.max_size_bytes,
+        keep_labeled = p.keep_labeled
+    )
     return nothing
 end
 
@@ -1095,8 +1117,10 @@ function movecache!(cache::DataCache, new_path::AbstractString)
     # Update in-memory absolute paths; TOML uses relative paths and moved with the dir.
     for (id, key) in cache._index
         new_abs = joinpath(dst, relpath(key.path, src))
-        cache._index[id] = CacheEntry(key.id, key.seq, key.label, new_abs,
-                                    key.format, key.description, key.datecached, key.dateaccessed, key.ttl)
+        cache._index[id] = CacheEntry(
+            key.id, key.seq, key.label, new_abs,
+            key.format, key.description, key.datecached, key.dateaccessed, key.ttl
+        )
     end
     return cache
 end
@@ -1122,16 +1146,18 @@ an existing entry in `dest`:
 Unlabeled entries are always imported regardless of `conflict`. Imported entries receive
 a new UUID, sequence number, and `datecached` timestamp in `dest`. Returns `dest`.
 """
-function importcache!(dest::DataCache, source::AbstractString;
-                      conflict::Symbol = :overwrite)
+function importcache!(
+        dest::DataCache, source::AbstractString;
+        conflict::Symbol = :overwrite
+    )
     conflict in (:overwrite, :skip, :error) || error(
         "conflict must be :overwrite, :skip, or :error; got $(repr(conflict))"
     )
     resolved = _resolve_import_source(source)
     try
-        _do_import!(dest, resolved.path; conflict=conflict)
+        _do_import!(dest, resolved.path; conflict = conflict)
     finally
-        resolved.is_temp && rm(resolved.path; recursive=true, force=true)
+        resolved.is_temp && rm(resolved.path; recursive = true, force = true)
     end
     return dest
 end
@@ -1145,24 +1171,24 @@ function _resolve_import_source(source::AbstractString)
         zip_path = joinpath(tmp, "download.zip")
         Downloads.download(source, zip_path)
         extract_dir = mktempdir()
-        rm(tmp; recursive=true)
+        rm(tmp; recursive = true)
         _extract_zip(zip_path, extract_dir)
-        return (path=extract_dir, is_temp=true)
+        return (path = extract_dir, is_temp = true)
     elseif endswith(lowercase(source), ".zip")
         isfile(source) || error("Zip file not found: $(repr(source))")
         extract_dir = mktempdir()
         _extract_zip(source, extract_dir)
-        return (path=extract_dir, is_temp=true)
+        return (path = extract_dir, is_temp = true)
     else
         isdir(source) || error("Import source directory not found: $(repr(source))")
-        return (path=source, is_temp=false)
+        return (path = source, is_temp = false)
     end
 end
 
 function _extract_zip(zip_path::AbstractString, dest_dir::AbstractString)
     mkpath(dest_dir)
     zf = ZipFile.Reader(zip_path)
-    try
+    return try
         for f in zf.files
             outpath = joinpath(dest_dir, f.name)
             if endswith(f.name, "/")
@@ -1190,8 +1216,9 @@ function _do_import!(dest::DataCache, src_dir::AbstractString; conflict::Symbol)
             # :overwrite — write! will replace the existing entry
         end
         data = _read_file(src_key)
-        write!(dest, data; label=lbl, description=src_key.description, format=src_key.format)
+        write!(dest, data; label = lbl, description = src_key.description, format = src_key.format)
     end
+    return
 end
 
 """
@@ -1201,12 +1228,12 @@ Print a detailed summary of all entries in `cache`.
 Equivalent to `show(stdout, MIME"text/plain"(), cache)`.
 """
 function showcache(cache::DataCache)
-    show(stdout, MIME"text/plain"(), cache)
+    return show(stdout, MIME"text/plain"(), cache)
 end
 
 function Base.show(io::IO, cache::DataCache)
     n = length(cache._index)
-    print(io, "DataCache(\"$(cache.store)\", $n entr$(n == 1 ? "y" : "ies"))")
+    return print(io, "DataCache(\"$(cache.store)\", $n entr$(n == 1 ? "y" : "ies"))")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", cache::DataCache)
@@ -1222,6 +1249,7 @@ function Base.show(io::IO, ::MIME"text/plain", cache::DataCache)
         _print_cacheentry(io, key, seq_width)
         i < n && println(io)
     end
+    return
 end
 
 # =============================================================================
@@ -1229,15 +1257,15 @@ end
 # =============================================================================
 
 # Module-level stores
-const _memcache_store = Dict{UInt64,Any}()
-const _filecache_ref  = Ref{Union{DataCache,Nothing}}(nothing)
+const _memcache_store = Dict{UInt64, Any}()
+const _filecache_ref = Ref{Union{DataCache, Nothing}}(nothing)
 
 # Autocache state
-const _autocache_enabled_ref      = Ref{Bool}(false)
-const _autocache_cache_ref        = Ref{Union{DataCache,Nothing}}(nothing)
-const _autocache_cache_explicit   = Ref{Bool}(false)   # true iff user passed cache= explicitly
+const _autocache_enabled_ref = Ref{Bool}(false)
+const _autocache_cache_ref = Ref{Union{DataCache, Nothing}}(nothing)
+const _autocache_cache_explicit = Ref{Bool}(false)   # true iff user passed cache= explicitly
 # nothing = all functions (global mode); Set = per-function allowlist
-const _autocache_funcs_ref        = Ref{Union{Nothing,Set{Any}}}(nothing)
+const _autocache_funcs_ref = Ref{Union{Nothing, Set{Any}}}(nothing)
 
 """
     default_filecache() → DataCache
@@ -1269,7 +1297,7 @@ end
 Discard all results stored by [`@memcache`](@ref) for this session.
 """
 function memcache_clear!()
-    empty!(_memcache_store)
+    return empty!(_memcache_store)
 end
 
 """
@@ -1297,14 +1325,14 @@ set_autocaching!(false)
 set_autocaching!(true; cache=DataCache("/my/project/cache"))  # explicit store
 ```
 """
-function set_autocaching!(enabled::Bool; cache::Union{DataCache,Nothing} = nothing)
-    _autocache_enabled_ref[]    = enabled
-    _autocache_funcs_ref[]      = nothing  # global mode
+function set_autocaching!(enabled::Bool; cache::Union{DataCache, Nothing} = nothing)
+    _autocache_enabled_ref[] = enabled
+    _autocache_funcs_ref[] = nothing  # global mode
     if enabled
-        _autocache_cache_ref[]      = isnothing(cache) ? default_filecache() : cache
+        _autocache_cache_ref[] = isnothing(cache) ? default_filecache() : cache
         _autocache_cache_explicit[] = !isnothing(cache)
     else
-        _autocache_cache_ref[]      = nothing
+        _autocache_cache_ref[] = nothing
         _autocache_cache_explicit[] = false
     end
     return _autocache_cache_ref[]
@@ -1335,11 +1363,11 @@ DataCaches.set_autocaching!(true, [pbdb_occurrences, pbdb_taxa])
 DataCaches.set_autocaching!(false, pbdb_occurrences)
 ```
 """
-function set_autocaching!(enabled::Bool, func; cache::Union{DataCache,Nothing} = nothing)
+function set_autocaching!(enabled::Bool, func; cache::Union{DataCache, Nothing} = nothing)
     if enabled
         _autocache_enabled_ref[] = true
         if isnothing(_autocache_cache_ref[]) || !isnothing(cache)
-            _autocache_cache_ref[]      = isnothing(cache) ? default_filecache() : cache
+            _autocache_cache_ref[] = isnothing(cache) ? default_filecache() : cache
             _autocache_cache_explicit[] = !isnothing(cache)
         end
         existing = _autocache_funcs_ref[]
@@ -1352,23 +1380,23 @@ function set_autocaching!(enabled::Bool, func; cache::Union{DataCache,Nothing} =
         existing = _autocache_funcs_ref[]
         if isnothing(existing)
             @warn "set_autocaching!(false, func) has no effect when global autocache is active. " *
-                  "Call set_autocaching!(false) to disable autocache globally."
+                "Call set_autocaching!(false) to disable autocache globally."
             return _autocache_cache_ref[]
         end
         delete!(existing, func)
         if isempty(existing)
-            _autocache_enabled_ref[]    = false
-            _autocache_funcs_ref[]      = nothing
-            _autocache_cache_ref[]      = nothing
+            _autocache_enabled_ref[] = false
+            _autocache_funcs_ref[] = nothing
+            _autocache_cache_ref[] = nothing
             _autocache_cache_explicit[] = false
         end
     end
     return _autocache_cache_ref[]
 end
 
-function set_autocaching!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache,Nothing} = nothing)
+function set_autocaching!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache, Nothing} = nothing)
     for f in funcs
-        set_autocaching!(enabled, f; cache=cache)
+        set_autocaching!(enabled, f; cache = cache)
     end
     return _autocache_cache_ref[]
 end
@@ -1385,7 +1413,7 @@ function _autocache_active(func)
     return func in funcs
 end
 
-function _get_autocache_store(package_cache::Union{DataCache,Nothing} = nothing)
+function _get_autocache_store(package_cache::Union{DataCache, Nothing} = nothing)
     # User explicitly passed cache= to set_autocaching! → always wins
     _autocache_cache_explicit[] && return _autocache_cache_ref[]
     # Library supplied a package-specific default → use it
@@ -1397,11 +1425,11 @@ function _get_autocache_store(package_cache::Union{DataCache,Nothing} = nothing)
 end
 
 function _autocache_key(func, endpoint, kwargs)
-    sorted_kw = sort(collect(pairs(kwargs)); by=first)
+    sorted_kw = sort(collect(pairs(kwargs)); by = first)
     label = string(hash(("_autocache_", nameof(func), endpoint, sorted_kw)))
     kw_str = join(["$(k) = $(repr(v))" for (k, v) in sorted_kw], ", ")
     desc = isempty(kw_str) ? "$(nameof(func))($(endpoint))" :
-                             "$(nameof(func))($(endpoint); $(kw_str))"
+        "$(nameof(func))($(endpoint); $(kw_str))"
     return (label, desc)
 end
 
@@ -1437,9 +1465,11 @@ If autocache is not active for `func`, calls `fetch_fn()` directly.
 2. `package_cache` kwarg → used when no explicit user cache was set
 3. [`default_filecache()`](@ref) → final fallback
 """
-function autocache(fetch_fn, func, endpoint, kwargs;
-                   package_cache::Union{DataCache,Nothing} = nothing,
-                   force_refresh::Bool = false)
+function autocache(
+        fetch_fn, func, endpoint, kwargs;
+        package_cache::Union{DataCache, Nothing} = nothing,
+        force_refresh::Bool = false
+    )
     _autocache_active(func) || return fetch_fn()
     _store = _get_autocache_store(package_cache)
     _ac_key, _ac_desc = _autocache_key(func, endpoint, kwargs)
@@ -1457,7 +1487,7 @@ end
 # Positional args are hashed by value; keyword args by (name, value) pairs.
 function _cache_hash_expr(func_name::String, raw_args)
     pos = Any[]
-    kw  = Any[]
+    kw = Any[]
     for a in raw_args
         if a isa Expr && a.head == :kw
             push!(kw, :($(QuoteNode(a.args[1])) => $(esc(a.args[2]))))
@@ -1478,7 +1508,7 @@ function _memcache_impl(expr)
     expr isa Expr && expr.head == :call ||
         error("@memcache: expected a function call, got: $expr")
     func_name = string(expr.args[1])
-    key_expr  = _cache_hash_expr(func_name, expr.args[2:end])
+    key_expr = _cache_hash_expr(func_name, expr.args[2:end])
     return quote
         let _k = $key_expr
             if haskey(_memcache_store, _k)
@@ -1498,11 +1528,11 @@ function _filecache_impl(expr, cache_expr)
     expr isa Expr && expr.head == :call ||
         error("@filecache: expected a function call, got: $expr")
     func_name = string(expr.args[1])
-    key_expr  = _cache_hash_expr(func_name, expr.args[2:end])
-    expr_str  = sprint(Base.show_unquoted, expr)
+    key_expr = _cache_hash_expr(func_name, expr.args[2:end])
+    expr_str = sprint(Base.show_unquoted, expr)
     return quote
         let _c = $cache_expr,
-            _lbl = string($key_expr)
+                _lbl = string($key_expr)
             if haskey(_c, _lbl)
                 @debug "$(DataCaches._log_ts()) @filecache: cache hit — $($expr_str)"
                 Base.read(_c, _lbl)
@@ -1570,11 +1600,11 @@ function _filecache_refresh_impl(expr, cache_expr)
     expr isa Expr && expr.head == :call ||
         error("@filecache!: expected a function call, got: $expr")
     func_name = string(expr.args[1])
-    key_expr  = _cache_hash_expr(func_name, expr.args[2:end])
-    expr_str  = sprint(Base.show_unquoted, expr)
+    key_expr = _cache_hash_expr(func_name, expr.args[2:end])
+    expr_str = sprint(Base.show_unquoted, expr)
     return quote
         let _c = $cache_expr,
-            _lbl = string($key_expr)
+                _lbl = string($key_expr)
             @debug "$(DataCaches._log_ts()) @filecache!: updating cache — $($expr_str)"
             _r = task_local_storage(:_pbdb_in_explicit_cache, true) do
                 $(esc(expr))
