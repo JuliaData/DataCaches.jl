@@ -19,12 +19,11 @@ TTL / max-age
 stale-while-revalidate or at least stale detection
 invalidate by label/pattern/predicate
 invalidate all entries for a function/endpoint/path pattern
-"refresh if older than X"
-"purge! (delete!) if not visited for more than X days"
 
-### Autocleaning
+- `CacheAssets.purge!` (Or if it can be fit into `CacheAssets.rm` with a few modifications), with kwargs to specify asset selection criteria, including LRU, various patterns on paths, formats, not visited for more than X days, older than ..."
+- Auto purge policy set at cache level on creation `DataCache(...; autopurge = true, (autopurge) kwargs...)` or by changed/set by calling `set_autopurge!([::DataCache]; kwargs...)`
 
-Set at cache level on creation `DataCache(...; autopurge = true, (autopurge) kwargs...)` or by calling `set_autopurge!([::DataCache]; kwargs...)`
+### Cache size stats
 
 
 ### Atomic writes and corruption resistance
