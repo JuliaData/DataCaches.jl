@@ -1,6 +1,6 @@
 module CacheAssets
 
-import ..DataCaches: DataCache, CacheEntry, CacheKey, default_filecache,
+import ..DataCaches: DataCache, CacheEntry, CacheEntry, default_filecache,
                      _read_file, _remove_entry!, _save_index,
                      _resolve_by_seq, write!, isstale
 import Dates
@@ -429,7 +429,7 @@ cache is allowed and produces a distinct new entry.
 - `force=false` — when `true`, silently replace an existing entry with the same label
 
 **Multi-source form (`srcs::AbstractVector`):**
-- Each entry preserves its original label; returns a `Vector{CacheKey}` of new keys
+- Each entry preserves its original label; returns a `Vector{CacheEntry}` of new keys
 - `force=false` — apply to all entries
 
 If `src_cache` is omitted, `default_filecache()` is used as the source.
