@@ -23,7 +23,7 @@ end
 function _resolve(cache::DataCache, spec::AbstractString)
     id = get(cache._by_label, spec, nothing)
     if isnothing(id)
-        matches = [k for k in keys(cache._index) if startswith(k, spec)]
+        matches = [k for k in entries(cache._index) if startswith(k, spec)]
         length(matches) == 0 && error("No cache entry with label or UUID prefix $(repr(spec))")
         length(matches) > 1  && error("Ambiguous UUID prefix $(repr(spec)) matches $(length(matches)) entries")
         id = only(matches)
@@ -429,7 +429,7 @@ cache is allowed and produces a distinct new entry.
 - `force=false` — when `true`, silently replace an existing entry with the same label
 
 **Multi-source form (`srcs::AbstractVector`):**
-- Each entry preserves its original label; returns a `Vector{CacheEntry}` of new keys
+- Each entry preserves its original label; returns a `Vector{CacheEntry}` of new entries
 - `force=false` — apply to all entries
 
 If `src_cache` is omitted, `default_filecache()` is used as the source.
