@@ -296,7 +296,6 @@ CacheAssets.purge!(; max_age = Day(30))
 ## API reference
 
 ```@docs
-PurgePolicy
 isstale
 invalidate!
 set_autopurge!
