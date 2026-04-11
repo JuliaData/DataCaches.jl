@@ -4,24 +4,15 @@
 
 Add rebuild cache -- missing files removed from index etc. All with @debug logging of individual files found, @warn if not found, @error if cache malformed etc. Rebuild proceeds if kwarg `dr
 
-### Expiration / invalidation primitives
+### ~~Expiration / invalidation primitives~~ (implemented in 0.4.0)
 
-Right now refresh/delete is basically:
-
-@filecache!
-overwrite by label
-manual delete
-library-side force_refresh
-
-That is enough for development, but not enough for a mature caching package. 1.0 should have first-class invalidation and cleaning:
-
-TTL / max-age
-stale-while-revalidate or at least stale detection
-invalidate by label/pattern/predicate
-invalidate all entries for a function/endpoint/path pattern
-
-- `CacheAssets.purge!` (Or if it can be fit into `CacheAssets.rm` with a few modifications), with kwargs to specify asset selection criteria, including LRU, various patterns on paths, formats, not visited for more than X days, older than ..."
-- Auto purge policy set at cache level on creation `DataCache(...; autopurge = true, (autopurge) kwargs...)` or by changed/set by calling `set_autopurge!([::DataCache]; kwargs...)`
+Implemented:
+- `CacheEntry.ttl` field + `DataCache(; default_ttl=)` for per-entry and cache-level TTL
+- `isstale(cache, entry/label)` for stale detection (stale-while-revalidate friendly)
+- `invalidate!(cache; stale, pattern, format, before, after, labeled, predicate, dry_run)` for bulk invalidation
+- `CacheAssets.purge!(cache; max_age, max_idle, keep_count, max_size_bytes, stale, keep_labeled, dry_run, …filters…)` for LRU/size-limit purging
+- `set_autopurge!(cache; max_age, max_idle, keep_count, max_size_bytes, keep_labeled)` for automatic post-write purging
+- `format` filter added to `CacheAssets.ls` / `ls!` / `entries`
 
 ### Cache size stats
 

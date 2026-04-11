@@ -1145,7 +1145,7 @@ using ZipFile
             @test e isa CacheKey
             # Constructing with the alias name still works
             e2 = CacheKey(e.id, e.seq, e.label, e.path, e.format, e.description,
-                          e.datecached, e.dateaccessed)
+                          e.datecached, e.dateaccessed, e.ttl)
             @test e2 == e
         end
     end
@@ -1403,6 +1403,443 @@ using ZipFile
         end
 
     end
+
+    # =========================================================================
+    # Invalidation and purging
+    # =========================================================================
+
+    @testset "Invalidation and purging" begin
+
+        # --- isstale ----------------------------------------------------------
+
+        @testset "isstale — no TTL always returns false" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e = write!(c, 42; label = "a")
+                @test !isstale(c, e)
+                @test !isstale(c, "a")
+            end
+        end
+
+        @testset "isstale — per-entry TTL in the past returns true" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                # Use a TTL that has already expired by backdating datecached
+                e = write!(c, 42; label = "stale_entry", ttl = Dates.Second(1))
+                # Simulate time passage by manually creating an old entry
+                old_entry = CacheEntry(e.id, e.seq, e.label, e.path, e.format, e.description,
+                                       Dates.now() - Dates.Second(10), e.dateaccessed, e.ttl)
+                c._index[e.id] = old_entry
+                @test isstale(c, old_entry)
+                @test isstale(c, "stale_entry")
+            end
+        end
+
+        @testset "isstale — per-entry TTL not yet expired returns false" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e = write!(c, 42; label = "fresh_entry", ttl = Dates.Hour(1))
+                @test !isstale(c, e)
+                @test !isstale(c, "fresh_entry")
+            end
+        end
+
+        @testset "isstale — cache default_ttl used when entry has no ttl" begin
+            mktempdir() do dir
+                c = DataCache(dir; default_ttl = Dates.Second(1))
+                e = write!(c, 42; label = "default_ttl_entry")
+                @test isnothing(e.ttl)  # no per-entry TTL set
+                # Backdate to simulate staleness
+                old_entry = CacheEntry(e.id, e.seq, e.label, e.path, e.format, e.description,
+                                       Dates.now() - Dates.Second(10), e.dateaccessed, nothing)
+                c._index[e.id] = old_entry
+                @test isstale(c, old_entry)
+            end
+        end
+
+        @testset "isstale — per-entry TTL overrides cache default_ttl" begin
+            mktempdir() do dir
+                c = DataCache(dir; default_ttl = Dates.Second(1))
+                # Write with a long per-entry TTL — should NOT be stale even though default is short
+                e = write!(c, 42; label = "override", ttl = Dates.Hour(24))
+                @test !isstale(c, e)
+            end
+        end
+
+        @testset "isstale — legacy entry (datecached = typemin) never stale" begin
+            mktempdir() do dir
+                c = DataCache(dir; default_ttl = Dates.Second(1))
+                e = write!(c, 42; label = "legacy")
+                legacy = CacheEntry(e.id, e.seq, e.label, e.path, e.format, e.description,
+                                    typemin(DateTime), e.dateaccessed, nothing)
+                c._index[e.id] = legacy
+                @test !isstale(c, legacy)
+            end
+        end
+
+        @testset "TTL persisted across DataCache reload" begin
+            mktempdir() do dir
+                c = DataCache(dir; default_ttl = Dates.Hour(6))
+                e = write!(c, 42; label = "ttl_persist", ttl = Dates.Minute(30))
+                @test !isnothing(c.default_ttl)
+                @test !isnothing(e.ttl)
+                # Reload
+                c2 = DataCache(dir)
+                @test !isnothing(c2.default_ttl)
+                e2 = entry(c2, "ttl_persist")
+                @test !isnothing(e2.ttl)
+                @test DataCaches._period_to_seconds(e2.ttl) == 30 * 60
+                @test DataCaches._period_to_seconds(c2.default_ttl) == 6 * 3600
+            end
+        end
+
+        @testset "isstale — default filecache form" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_default_filecache!(c)
+                e = write!(c, 99; label = "isstale_default_test")
+                @test !isstale(e)
+                @test !isstale("isstale_default_test")
+            end
+        end
+
+        # --- invalidate! ------------------------------------------------------
+
+        @testset "invalidate! — by stale=true removes only stale entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e_stale = write!(c, 1; label = "stale")
+                e_fresh = write!(c, 2; label = "fresh", ttl = Dates.Hour(1))
+                # Backdate the stale entry
+                old = CacheEntry(e_stale.id, e_stale.seq, e_stale.label, e_stale.path,
+                                 e_stale.format, e_stale.description,
+                                 Dates.now() - Dates.Second(10), e_stale.dateaccessed,
+                                 Dates.Second(1))
+                c._index[e_stale.id] = old
+                invalidate!(c; stale = true)
+                @test !haskey(c, "stale")
+                @test haskey(c, "fresh")
+            end
+        end
+
+        @testset "invalidate! — by pattern removes matching entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "temp_foo")
+                write!(c, 2; label = "temp_bar")
+                write!(c, 3; label = "keep_me")
+                invalidate!(c; pattern = r"^temp_")
+                @test !haskey(c, "temp_foo")
+                @test !haskey(c, "temp_bar")
+                @test haskey(c, "keep_me")
+            end
+        end
+
+        @testset "invalidate! — by before= removes old entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e_old = write!(c, 1; label = "old")
+                e_new = write!(c, 2; label = "new")
+                # Backdate e_old
+                old = CacheEntry(e_old.id, e_old.seq, e_old.label, e_old.path,
+                                 e_old.format, e_old.description,
+                                 Dates.now() - Dates.Day(10), e_old.dateaccessed, nothing)
+                c._index[e_old.id] = old
+                invalidate!(c; before = Dates.now() - Dates.Day(5))
+                @test !haskey(c, "old")
+                @test haskey(c, "new")
+            end
+        end
+
+        @testset "invalidate! — by predicate" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                nt = (x = 1, y = 2)
+                write!(c, nt; label = "json_entry")   # NamedTuple → json
+                write!(c, [1, 2]; label = "jls_entry")  # Vector → jls
+                invalidate!(c; predicate = e -> e.format == "jls")
+                @test haskey(c, "json_entry")
+                @test !haskey(c, "jls_entry")
+            end
+        end
+
+        @testset "invalidate! — format filter" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "j1")
+                write!(c, 2; label = "j2")
+                write!(c, "hello"; label = "j3")
+                # j1 and j2 are jls, j3 is also jls for a plain string
+                invalidate!(c; format = "jls", predicate = e -> e.label == "j1")
+                @test !haskey(c, "j1")
+                @test haskey(c, "j2")
+                @test haskey(c, "j3")
+            end
+        end
+
+        @testset "invalidate! — dry_run does not delete" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "a")
+                write!(c, 2; label = "b")
+                buf = IOBuffer()
+                invalidate!(c; pattern = "a", dry_run = true, io = buf)
+                @test haskey(c, "a")   # not deleted
+                @test haskey(c, "b")
+                output = String(take!(buf))
+                @test occursin("dry run", output)
+            end
+        end
+
+        @testset "invalidate! — default cache form" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_default_filecache!(c)
+                write!(c, 99; label = "inval_default_test")
+                @test haskey(c, "inval_default_test")
+                invalidate!(; pattern = "inval_default_test")
+                @test !haskey(c, "inval_default_test")
+            end
+        end
+
+        @testset "invalidate! — empty match is a no-op" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "keep")
+                invalidate!(c; pattern = r"nomatch_xyz")
+                @test haskey(c, "keep")
+            end
+        end
+
+        # --- CacheAssets.purge! -----------------------------------------------
+
+        @testset "purge! — max_age removes old entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e_old = write!(c, 1; label = "old")
+                e_new = write!(c, 2; label = "new")
+                old = CacheEntry(e_old.id, e_old.seq, e_old.label, e_old.path,
+                                 e_old.format, e_old.description,
+                                 Dates.now() - Dates.Day(10), e_old.dateaccessed, nothing)
+                c._index[e_old.id] = old
+                DataCaches.CacheAssets.purge!(c; max_age = Dates.Day(5))
+                @test !haskey(c, "old")
+                @test haskey(c, "new")
+            end
+        end
+
+        @testset "purge! — max_idle removes entries not accessed recently" begin
+            mktempdir() do dir
+                c = DataCache(dir; track_access = true)
+                e1 = write!(c, 1; label = "idle")
+                e2 = write!(c, 2; label = "active")
+                # Simulate old access for e1
+                old1 = CacheEntry(e1.id, e1.seq, e1.label, e1.path, e1.format, e1.description,
+                                  e1.datecached, Dates.now() - Dates.Day(10), nothing)
+                # Simulate recent access for e2
+                active2 = CacheEntry(e2.id, e2.seq, e2.label, e2.path, e2.format, e2.description,
+                                     e2.datecached, Dates.now(), nothing)
+                c._index[e1.id] = old1
+                c._index[e2.id] = active2
+                DataCaches.CacheAssets.purge!(c; max_idle = Dates.Day(5))
+                @test !haskey(c, "idle")
+                @test haskey(c, "active")
+            end
+        end
+
+        @testset "purge! — keep_count retains N most recently accessed" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e1 = write!(c, 1; label = "oldest")
+                e2 = write!(c, 2; label = "middle")
+                e3 = write!(c, 3; label = "newest")
+                # Set dateaccessed: oldest < middle < newest
+                now = Dates.now()
+                c._index[e1.id] = CacheEntry(e1.id, e1.seq, e1.label, e1.path, e1.format,
+                                             e1.description, e1.datecached,
+                                             now - Dates.Hour(3), nothing)
+                c._index[e2.id] = CacheEntry(e2.id, e2.seq, e2.label, e2.path, e2.format,
+                                             e2.description, e2.datecached,
+                                             now - Dates.Hour(2), nothing)
+                c._index[e3.id] = CacheEntry(e3.id, e3.seq, e3.label, e3.path, e3.format,
+                                             e3.description, e3.datecached,
+                                             now - Dates.Hour(1), nothing)
+                DataCaches.CacheAssets.purge!(c; keep_count = 2)
+                @test !haskey(c, "oldest")
+                @test haskey(c, "middle")
+                @test haskey(c, "newest")
+            end
+        end
+
+        @testset "purge! — keep_labeled protects labeled entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e_lbl = write!(c, 1; label = "important")
+                e_unlbl = write!(c, 2)
+                # Backdate both
+                now = Dates.now()
+                for (id, e) in [(e_lbl.id, e_lbl), (e_unlbl.id, e_unlbl)]
+                    c._index[id] = CacheEntry(e.id, e.seq, e.label, e.path, e.format,
+                                              e.description, now - Dates.Day(10),
+                                              e.dateaccessed, nothing)
+                end
+                DataCaches.CacheAssets.purge!(c; max_age = Dates.Day(5), keep_labeled = true)
+                @test haskey(c, "important")          # labeled — protected
+                @test length(c) == 1                  # unlabeled removed
+            end
+        end
+
+        @testset "purge! — stale=true removes stale entries" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e_stale = write!(c, 1; label = "stale", ttl = Dates.Second(1))
+                e_fresh = write!(c, 2; label = "fresh", ttl = Dates.Hour(1))
+                # Backdate the stale entry
+                old = CacheEntry(e_stale.id, e_stale.seq, e_stale.label, e_stale.path,
+                                 e_stale.format, e_stale.description,
+                                 Dates.now() - Dates.Second(10), e_stale.dateaccessed,
+                                 e_stale.ttl)
+                c._index[e_stale.id] = old
+                DataCaches.CacheAssets.purge!(c; stale = true)
+                @test !haskey(c, "stale")
+                @test haskey(c, "fresh")
+            end
+        end
+
+        @testset "purge! — dry_run does not delete" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e = write!(c, 1; label = "a")
+                old = CacheEntry(e.id, e.seq, e.label, e.path, e.format, e.description,
+                                 Dates.now() - Dates.Day(10), e.dateaccessed, nothing)
+                c._index[e.id] = old
+                buf = IOBuffer()
+                DataCaches.CacheAssets.purge!(c; max_age = Dates.Day(5),
+                                              dry_run = true, io = buf)
+                @test haskey(c, "a")  # not deleted
+                output = String(take!(buf))
+                @test occursin("dry run", output)
+            end
+        end
+
+        @testset "purge! — format filter" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                e1 = write!(c, 1; label = "jls1")
+                e2 = write!(c, 2; label = "jls2")
+                # Backdate both
+                for (id, e) in [(e1.id, e1), (e2.id, e2)]
+                    c._index[id] = CacheEntry(e.id, e.seq, e.label, e.path, e.format,
+                                              e.description, Dates.now() - Dates.Day(10),
+                                              e.dateaccessed, nothing)
+                end
+                # Only purge entries with format != "jls" — none should be deleted
+                DataCaches.CacheAssets.purge!(c; max_age = Dates.Day(5), format = "csv")
+                @test haskey(c, "jls1")
+                @test haskey(c, "jls2")
+                # Now purge jls entries
+                DataCaches.CacheAssets.purge!(c; max_age = Dates.Day(5), format = "jls")
+                @test !haskey(c, "jls1")
+                @test !haskey(c, "jls2")
+            end
+        end
+
+        @testset "purge! — default cache form" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_default_filecache!(c)
+                e = write!(c, 1; label = "purge_default_test")
+                old = CacheEntry(e.id, e.seq, e.label, e.path, e.format, e.description,
+                                 Dates.now() - Dates.Day(10), e.dateaccessed, nothing)
+                c._index[e.id] = old
+                DataCaches.CacheAssets.purge!(; max_age = Dates.Day(5))
+                @test !haskey(c, "purge_default_test")
+            end
+        end
+
+        # --- set_autopurge! ---------------------------------------------------
+
+        @testset "set_autopurge! — keep_count prunes on write!" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_autopurge!(c; keep_count = 2)
+                write!(c, 1; label = "a")
+                write!(c, 2; label = "b")
+                @test length(c) == 2
+                write!(c, 3; label = "c")  # triggers purge: 3 entries → keep 2 newest
+                @test length(c) == 2
+            end
+        end
+
+        @testset "set_autopurge! — enabled=false disables policy" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_autopurge!(c; keep_count = 1)
+                write!(c, 1; label = "x")
+                write!(c, 2; label = "y")
+                @test length(c) == 1  # policy active
+                set_autopurge!(c; enabled = false)
+                @test isnothing(c._autopurge_policy)
+                write!(c, 3; label = "z")
+                # Should now have z + whichever survived, not pruned further
+                @test length(c) >= 1
+            end
+        end
+
+        @testset "set_autopurge! — max_age prunes old entries on write!" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_autopurge!(c; max_age = Dates.Day(5))
+                e_old = write!(c, 1; label = "old_entry")
+                # Backdate manually to simulate age
+                old = CacheEntry(e_old.id, e_old.seq, e_old.label, e_old.path,
+                                 e_old.format, e_old.description,
+                                 Dates.now() - Dates.Day(10), e_old.dateaccessed, nothing)
+                c._index[e_old.id] = old
+                # Next write triggers autopurge
+                write!(c, 2; label = "new_entry")
+                @test !haskey(c, "old_entry")
+                @test haskey(c, "new_entry")
+            end
+        end
+
+        @testset "set_autopurge! — default cache form" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                set_default_filecache!(c)
+                set_autopurge!(; keep_count = 2)
+                @test !isnothing(c._autopurge_policy)
+                set_autopurge!(; enabled = false)
+                @test isnothing(c._autopurge_policy)
+            end
+        end
+
+        # --- ls format filter -------------------------------------------------
+
+        @testset "CacheAssets.ls — format filter (String)" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                write!(c, 1; label = "j1")
+                write!(c, 2; label = "j2")
+                result = DataCaches.CacheAssets.ls(c; format = "jls")
+                @test length(result) == 2
+                @test all(e.format == "jls" for e in result)
+            end
+        end
+
+        @testset "CacheAssets.ls — format filter (Regex)" begin
+            mktempdir() do dir
+                c = DataCache(dir)
+                df = DataFrame(x = [1])
+                write!(c, 1; label = "jls_entry")
+                write!(c, df; label = "csv_entry")
+                result = DataCaches.CacheAssets.ls(c; format = r"csv|json")
+                @test length(result) == 1
+                @test result[1].label == "csv_entry"
+            end
+        end
+
+    end  # @testset "Invalidation and purging"
 
     include("test_migrate_legacy_defaultcache.jl")
     include("test_serializers.jl")

@@ -1,5 +1,82 @@
 # Changelog
 
+## [0.4.0]
+
+### Added
+
+- **`CacheEntry.ttl :: Union{Nothing,Period}`**: New field on [`CacheEntry`]
+  for per-entry time-to-live. Pass `ttl = Dates.Hour(6)` to [`write!`] to
+  record a TTL alongside the data. Stored in the cache index as `ttl_seconds`
+  (integer seconds); backward-compatible — existing caches without `ttl_seconds`
+  load with `ttl = nothing`.
+
+- **`DataCache(...; default_ttl = Dates.Day(1))`**: Cache-level default TTL.
+  When an entry has no per-entry `ttl`, `isstale` and autopurge fall back to the
+  cache's `default_ttl`. The default TTL is persisted to `cache_index.toml`
+  under `[cache_config]` so it survives across sessions.
+
+- **`isstale(cache, entry) → Bool`** /
+  **`isstale(cache, label) → Bool`** /
+  **`isstale(entry) → Bool`** /
+  **`isstale(label) → Bool`**:
+  Check whether an entry has exceeded its effective TTL (per-entry or cache
+  default). Returns `false` when no TTL is configured. `read` never blocks on
+  staleness — callers decide whether to refresh, enabling stale-while-revalidate
+  patterns.
+
+- **`invalidate!(cache; kwargs...) → DataCache`** /
+  **`invalidate!(; kwargs...) → DataCache`**:
+  Bulk-remove entries matching a set of criteria in a single batched index
+  rewrite. Filtering kwargs (same as `entries`/`CacheAssets.ls`):
+  `pattern`, `filepath_pattern`, `filename_pattern`, `format`, `before`,
+  `after`, `accessed_before_date`, `accessed_after_date`, `labeled`.
+  Additional invalidation selectors: `stale = true` (entries past TTL),
+  `predicate::Function` (arbitrary entry → Bool). `dry_run = true` prints
+  candidates without deleting.
+
+- **`DataCaches.CacheAssets.purge!(cache; kwargs...) → DataCache`** /
+  **`CacheAssets.purge!(; kwargs...) → DataCache`**:
+  Power-tool for bulk deletion with LRU and size-limit eviction. Accepts all
+  `ls` filter kwargs to scope candidates, plus purge-specific criteria:
+  `stale`, `max_age`, `max_idle`, `keep_count`, `max_size_bytes`, `keep_labeled`,
+  `dry_run`. Multiple criteria are unioned (any match → delete).
+
+- **`PurgePolicy`**: Immutable struct holding an autopurge configuration
+  (`max_age`, `max_idle`, `keep_count`, `max_size_bytes`, `keep_labeled`).
+  Created by `set_autopurge!`.
+
+- **`set_autopurge!(cache; kwargs...) → DataCache`** /
+  **`set_autopurge!(; kwargs...) → DataCache`**:
+  Attach a `PurgePolicy` to a cache. After each `write!`, the policy is applied
+  automatically. Pass `enabled = false` to remove the policy. Kwargs match
+  `PurgePolicy` fields.
+
+- **`write!` accepts `ttl::Union{Nothing,Period}` kwarg**: The per-entry TTL
+  stored in the `CacheEntry`. Falls back to `cache.default_ttl` at staleness-
+  check time (not at write time), so changing `default_ttl` retroactively
+  affects all entries without a per-entry TTL.
+
+- **`format` filter in `CacheAssets.ls` / `ls!` / `entries`**:
+  New `format::Union{Nothing,String,Regex}` keyword argument for filtering
+  entries by their serialization format tag (e.g. `format = "jls"`,
+  `format = r"csv|json"`). Also available in `CacheAssets.purge!` and
+  `invalidate!`.
+
+- **`scratch_datacache!` accepts `default_ttl` kwarg**: Passes through to the
+  underlying `DataCache` constructor.
+
+### Changed
+
+- **`DataCache` struct**: Two new fields added — `default_ttl` and
+  `_autopurge_policy`. The `DataCache` positional constructor unchanged; the
+  named-arg constructor gains optional `default_ttl` kwarg.
+
+- **`CacheEntry` struct**: `ttl` field added as the 9th (last) field. All
+  internal construction sites updated. Existing code that does not manually
+  construct `CacheEntry` is unaffected.
+
+---
+
 ## [0.3.1]
 
 ### Added

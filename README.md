@@ -502,6 +502,87 @@ documentation of each function.
 
 ---
 
+## Cache expiration and invalidation
+
+DataCaches provides first-class invalidation — TTL, stale detection, bulk
+removal, and automatic post-write purge policies.
+
+### TTL and staleness
+
+```julia
+using DataCaches, Dates
+
+# Per-entry TTL
+dc = DataCache(:myproject)
+write!(dc, result; label = "query1", ttl = Hour(6))
+
+# Check before re-using
+if isstale(dc, "query1")
+    result = fetch_live()
+    write!(dc, result; label = "query1", ttl = Hour(6))
+end
+
+# Cache-level default TTL (persisted across sessions)
+dc = DataCache(:myproject; default_ttl = Day(1))
+write!(dc, result; label = "query2")   # inherits Day(1)
+```
+
+`isstale` is purely informational — `read` never blocks on staleness, enabling
+stale-while-revalidate patterns.
+
+### Bulk invalidation
+
+```julia
+# Remove all stale entries
+invalidate!(dc; stale = true)
+
+# Remove by label pattern
+invalidate!(dc; pattern = r"^temp_")
+
+# Remove by format
+invalidate!(dc; format = "jls")
+
+# Remove by predicate
+invalidate!(dc; predicate = e -> startswith(e.description, "old_func("))
+
+# Preview without deleting
+invalidate!(dc; stale = true, dry_run = true)
+```
+
+### Power purging
+
+```julia
+using DataCaches.CacheAssets
+
+# LRU: keep only the 20 most recently accessed entries
+purge!(dc; keep_count = 20)
+
+# Remove entries older than 30 days
+purge!(dc; max_age = Day(30))
+
+# Limit total cache size to 500 MiB (LRU eviction)
+purge!(dc; max_size_bytes = 500 * 1024 * 1024)
+
+# Dry-run
+purge!(dc; max_age = Day(7), dry_run = true)
+```
+
+### Auto-purge policy
+
+```julia
+# Keep only the 50 most recently used entries — enforced automatically on write
+set_autopurge!(dc; keep_count = 50)
+write!(dc, new_result; label = "latest")   # purge fires here
+
+# Combined: age + count, protect labeled entries
+set_autopurge!(dc; max_age = Day(30), keep_count = 100, keep_labeled = true)
+
+# Disable
+set_autopurge!(dc; enabled = false)
+```
+
+---
+
 ## About
 
 This package addresses a general need for disk-based memoization and caching in contexts such as 

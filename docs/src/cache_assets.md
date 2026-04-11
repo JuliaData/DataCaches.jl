@@ -9,7 +9,7 @@ filesystem-style interface for managing individual *assets* (entries) within a
 `DataCache`. Import it as `using DataCaches.CacheAssets` or access functions as
 `DataCaches.CacheAssets.<function>`.
 
-All four functions accept an optional leading `DataCache` argument. When omitted,
+All functions accept an optional leading `DataCache` argument. When omitted,
 `default_filecache()` is used.
 
 ## List assets
@@ -49,6 +49,10 @@ entries = CacheAssets.ls(dc; accessed_before_date = DateTime("2026-06-01T00:00:0
 # Filter by whether the entry has a label
 entries = CacheAssets.ls(dc; labeled = true)   # only labeled entries
 entries = CacheAssets.ls(dc; labeled = false)  # only unlabeled entries
+
+# Filter by format tag
+entries = CacheAssets.ls(dc; format = "jls")        # exact match
+entries = CacheAssets.ls(dc; format = r"csv|json")  # Regex match
 
 # Sort
 entries = CacheAssets.ls(dc; sortby = :date_desc)          # newest first
@@ -165,7 +169,7 @@ least-recently-used assets.
 
 | Function | Description |
 |---|---|
-| `CacheAssets.ls([dc]; pattern, filepath_pattern, filename_pattern, before, after, accessed_before_date, accessed_after_date, labeled, sortby, rev)` | List assets in a cache |
+| `CacheAssets.ls([dc]; pattern, filepath_pattern, filename_pattern, format, before, after, accessed_before_date, accessed_after_date, labeled, sortby, rev)` | List assets in a cache |
 | `CacheAssets.ls!([dc]; detail, …same filters…, io)` | Print formatted listing to `io` |
 | `CacheAssets.rm([dc,] assets...; force)` | Remove assets by varargs (batched index rewrite) |
 | `CacheAssets.rm([dc,] specs::Vector; force)` | Remove assets by vector (batched index rewrite) |
@@ -174,6 +178,7 @@ least-recently-used assets.
 | `CacheAssets.mv([src_dc,] src, dest_dc; label, force)` | Move asset to another cache |
 | `CacheAssets.cp([src_dc,] src, dest_dc; label, force)` | Copy asset to another cache |
 | `CacheAssets.cp([src_dc,] srcs::Vector, dest_dc; force)` | Copy multiple assets to another cache |
+| `CacheAssets.purge!([dc]; max_age, max_idle, keep_count, max_size_bytes, stale, keep_labeled, dry_run, …ls filters…)` | Bulk-delete entries by age, idle time, count, or size (LRU) |
 
 ## API reference
 

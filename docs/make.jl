@@ -13,11 +13,12 @@ makedocs(;
         assets=String[],
     ),
     pages=[
-        "Home"                => "index.md",
-        "API Reference"       => "api.md",
-        "Caches"              => "caches.md",
-        "Cache Assets"        => "cache_assets.md",
-        "Library Integration" => "integration.md",
+        "Home"                       => "index.md",
+        "API Reference"              => "api.md",
+        "Caches"                     => "caches.md",
+        "Cache Assets"               => "cache_assets.md",
+        "Expiration & Invalidation"  => "expiration.md",
+        "Library Integration"        => "integration.md",
     ],
 )
 

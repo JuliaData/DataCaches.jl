@@ -11,9 +11,10 @@ using Tables
 using UUIDs
 using ZipFile
 
-export DataCache, CacheEntry, CacheKey
+export DataCache, CacheEntry, CacheKey, PurgePolicy
 export write!, relabel!, reindexcache!, keylabels, keypaths, clear!, showcache, label, path
 export entries, entry, labels
+export isstale, invalidate!, set_autopurge!
 export @filecache, @filecache!, @memcache
 export default_filecache, set_default_filecache!, memcache_clear!
 export set_autocaching!
@@ -129,6 +130,45 @@ function _infer_format_from_path(fpath::String)
 end
 
 # =============================================================================
+# TTL helpers
+# =============================================================================
+
+# Convert a Period to an integer number of seconds (for TOML serialization).
+function _period_to_seconds(p::Period)::Int
+    return round(Int, Dates.value(Dates.Nanosecond(p)) / 1_000_000_000)
+end
+
+# Reconstruct a Period from stored seconds (always returns Second for simplicity).
+_seconds_to_period(s::Int)::Dates.Second = Dates.Second(s)
+
+# =============================================================================
+# PurgePolicy
+# =============================================================================
+
+"""
+    PurgePolicy
+
+Configuration for automatic cache purging, applied after each [`write!`](@ref) call
+when a policy has been set with [`set_autopurge!`](@ref).
+
+Fields:
+- `max_age::Union{Nothing,Period}` — remove entries older than this age (by `datecached`)
+- `max_idle::Union{Nothing,Period}` — remove entries not accessed within this period
+- `keep_count::Union{Nothing,Int}` — keep only the N most-recently-accessed entries (LRU)
+- `max_size_bytes::Union{Nothing,Int}` — purge LRU entries until total cache size ≤ limit
+- `keep_labeled::Bool` — when `true`, labeled entries are never auto-purged
+
+See [`set_autopurge!`](@ref) and [`DataCaches.CacheAssets.purge!`](@ref).
+"""
+struct PurgePolicy
+    max_age::Union{Nothing,Period}
+    max_idle::Union{Nothing,Period}
+    keep_count::Union{Nothing,Int}
+    max_size_bytes::Union{Nothing,Int}
+    keep_labeled::Bool
+end
+
+# =============================================================================
 # CacheEntry
 # =============================================================================
 
@@ -147,6 +187,7 @@ and related functions. Fields are accessed directly:
 - `e.description   :: String`    — human-readable source expression (empty if none was recorded)
 - `e.datecached    :: DateTime`  — when the entry was written; `typemin(DateTime)` if unknown
 - `e.dateaccessed  :: DateTime`  — when the entry was last read; `typemin(DateTime)` if never accessed
+- `e.ttl           :: Union{Nothing,Period}` — time-to-live; `nothing` means no expiry
 
 # Backward compatibility
 
@@ -163,6 +204,7 @@ struct CacheEntry
     description::String   # human-readable source expression, or ""
     datecached::DateTime  # timestamp of last write; typemin(DateTime) = unknown (legacy entry)
     dateaccessed::DateTime # timestamp of last read; typemin(DateTime) = never accessed
+    ttl::Union{Nothing,Period}  # time-to-live; nothing = no expiry
 end
 
 # Backward-compatible alias; will gain a deprecation warning in a future release.
@@ -293,6 +335,8 @@ mutable struct DataCache
     _by_label::Dict{String,String}   # label → id
     _next_seq::Int                   # monotonically incrementing seq counter
     track_access::Bool               # record dateaccessed on every read (opt-out with false)
+    default_ttl::Union{Nothing,Period}              # cache-level default TTL; persisted in TOML
+    _autopurge_policy::Union{Nothing,PurgePolicy}   # runtime autopurge policy; not persisted
 end
 
 const _INDEX_FILENAME = "cache_index.toml"
@@ -305,17 +349,23 @@ function _default_cache_dir()
     return store
 end
 
-function DataCache(store::AbstractString = _default_cache_dir(); track_access::Bool = true)
+function DataCache(store::AbstractString = _default_cache_dir();
+                   track_access::Bool = true,
+                   default_ttl::Union{Nothing,Period} = nothing)
     store = abspath(store)
     mkpath(store)
-    cache = DataCache(store, Dict{String,CacheEntry}(), Dict{String,String}(), 1, track_access)
+    cache = DataCache(store, Dict{String,CacheEntry}(), Dict{String,String}(), 1, track_access, nothing, nothing)
     _load_index!(cache)
+    # Constructor kwarg overrides any persisted default_ttl
+    if !isnothing(default_ttl)
+        cache.default_ttl = default_ttl
+    end
     return cache
 end
 
-function DataCache(key::Symbol; track_access::Bool = true)
+function DataCache(key::Symbol; track_access::Bool = true, default_ttl::Union{Nothing,Period} = nothing)
     store = joinpath(Caches._user_dir(), string(key))
-    return DataCache(store; track_access)
+    return DataCache(store; track_access, default_ttl)
 end
 
 """
@@ -345,10 +395,12 @@ get_cache() = _CACHE[]
 end
 ```
 """
-function scratch_datacache!(pkg_uuid::Base.UUID, key::Symbol = :datacache; track_access::Bool = true)
+function scratch_datacache!(pkg_uuid::Base.UUID, key::Symbol = :datacache;
+                            track_access::Bool = true,
+                            default_ttl::Union{Nothing,Period} = nothing)
     store = joinpath(Caches._module_dir(), string(pkg_uuid), string(key))
     mkpath(store)
-    return DataCache(store; track_access)
+    return DataCache(store; track_access, default_ttl)
 end
 
 # --- Index I/O ---------------------------------------------------------------
@@ -359,7 +411,13 @@ function _load_index!(cache::DataCache)
     p = _index_file(cache)
     isfile(p) || return
     data = TOML.parsefile(p)
-    legacy = Tuple{String,String,String,String,String,DateTime,DateTime}[]  # (id, lbl, fpath, fmt, desc, dt, da) for seq==0
+    # Read cache-level config (default_ttl)
+    config = get(data, "cache_config", Dict())
+    ttl_cfg = get(config, "default_ttl_seconds", nothing)
+    if ttl_cfg isa Integer && ttl_cfg > 0
+        cache.default_ttl = _seconds_to_period(ttl_cfg)
+    end
+    legacy = Tuple{String,String,String,String,String,DateTime,DateTime,Union{Nothing,Period}}[]
     max_seq = 0
     for (id, entry) in get(data, "entries", Dict())
         lbl    = get(entry, "label",       "")
@@ -393,20 +451,22 @@ function _load_index!(cache::DataCache)
                  typemin(DateTime)
              end
         fmt = get(entry, "format", _infer_format_from_path(fpath))
+        ttl_raw = get(entry, "ttl_seconds", nothing)
+        ttl = ttl_raw isa Integer && ttl_raw > 0 ? _seconds_to_period(ttl_raw) : nothing
         if seq == 0
-            push!(legacy, (id, lbl, fpath, fmt, desc, dt, da))
+            push!(legacy, (id, lbl, fpath, fmt, desc, dt, da, ttl))
         else
             max_seq = max(max_seq, seq)
-            key = CacheEntry(id, seq, lbl, fpath, fmt, desc, dt, da)
+            key = CacheEntry(id, seq, lbl, fpath, fmt, desc, dt, da, ttl)
             cache._index[id] = key
             isempty(lbl) || (cache._by_label[lbl] = id)
         end
     end
     # Assign seq to legacy entries (no seq in TOML), ordered by datecached
     sort!(legacy; by = t -> t[6])  # sort by dt
-    for (id, lbl, fpath, fmt, desc, dt, da) in legacy
+    for (id, lbl, fpath, fmt, desc, dt, da, ttl) in legacy
         max_seq += 1
-        key = CacheEntry(id, max_seq, lbl, fpath, fmt, desc, dt, da)
+        key = CacheEntry(id, max_seq, lbl, fpath, fmt, desc, dt, da, ttl)
         cache._index[id] = key
         isempty(lbl) || (cache._by_label[lbl] = id)
     end
@@ -426,10 +486,17 @@ function _save_index(cache::DataCache)
                               Dates.format(key.datecached, "yyyy-mm-ddTHH:MM:SS"),
             "dateaccessed" => key.dateaccessed == typemin(DateTime) ? "" :
                               Dates.format(key.dateaccessed, "yyyy-mm-ddTHH:MM:SS"),
+            "ttl_seconds"  => isnothing(key.ttl) ? "" : _period_to_seconds(key.ttl),
+        )
+    end
+    toml_data = Dict{String,Any}("entries" => entries)
+    if !isnothing(cache.default_ttl)
+        toml_data["cache_config"] = Dict{String,Any}(
+            "default_ttl_seconds" => _period_to_seconds(cache.default_ttl),
         )
     end
     open(_index_file(cache), "w") do io
-        TOML.print(io, Dict{String,Any}("entries" => entries))
+        TOML.print(io, toml_data)
     end
 end
 
@@ -481,7 +548,8 @@ later by label using [`entry`](@ref).
 function write!(cache::DataCache, data;
                 label::AbstractString       = "",
                 description::AbstractString = "",
-                format::Union{String,Nothing} = nothing)
+                format::Union{String,Nothing} = nothing,
+                ttl::Union{Nothing,Period} = nothing)
     s = if isnothing(format)
             serializer_for(data)
         else
@@ -497,9 +565,10 @@ function write!(cache::DataCache, data;
         isnothing(old) || _remove_entry!(cache, old)
         cache._by_label[label] = id
     end
-    key = CacheEntry(id, seq, label, fpath, format_tag(s), description, Dates.now(), typemin(DateTime))
+    key = CacheEntry(id, seq, label, fpath, format_tag(s), description, Dates.now(), typemin(DateTime), ttl)
     cache._index[id] = key
     _save_index(cache)
+    !isnothing(cache._autopurge_policy) && _run_autopurge!(cache)
     return key
 end
 
@@ -517,7 +586,7 @@ function Base.read(cache::DataCache, key::CacheEntry)
     data = _read_file(key)
     if cache.track_access
         new_key = CacheEntry(key.id, key.seq, key.label, key.path, key.format, key.description,
-                           key.datecached, Dates.now())
+                           key.datecached, Dates.now(), key.ttl)
         cache._index[key.id] = new_key
         _save_index(cache)
     end
@@ -684,7 +753,7 @@ function _relabel_by_id!(cache::DataCache, id::String, new_label::AbstractString
     end
     isempty(current.label) || delete!(cache._by_label, current.label)
     new_key = CacheEntry(id, current.seq, new_label, current.path, current.format, current.description,
-                       current.datecached, current.dateaccessed)
+                       current.datecached, current.dateaccessed, current.ttl)
     cache._index[id] = new_key
     isempty(new_label) || (cache._by_label[new_label] = id)
     _save_index(cache)
@@ -758,12 +827,233 @@ function reindexcache!(cache::DataCache)
     sorted = sort(collect(values(cache._index)); by = k -> k.seq)
     for (new_seq, key) in enumerate(sorted)
         new_key = CacheEntry(key.id, new_seq, key.label, key.path, key.format, key.description,
-                           key.datecached, key.dateaccessed)
+                           key.datecached, key.dateaccessed, key.ttl)
         cache._index[key.id] = new_key
     end
     cache._next_seq = length(sorted) + 1
     _save_index(cache)
     return cache
+end
+
+# =============================================================================
+# Staleness / TTL
+# =============================================================================
+
+"""
+    isstale(cache::DataCache, entry::CacheEntry) → Bool
+    isstale(cache::DataCache, label::AbstractString) → Bool
+    isstale(entry::CacheEntry) → Bool
+    isstale(label::AbstractString) → Bool
+
+Return `true` if `entry` (or the entry identified by `label`) has exceeded its
+time-to-live and is considered stale.
+
+The effective TTL for an entry is its own `entry.ttl` if set, otherwise the
+cache's `default_ttl`. When no TTL applies (both are `nothing`), returns `false`.
+
+Staleness is purely informational — [`read`](@ref) does **not** enforce it.
+The caller decides whether to refresh (enabling stale-while-revalidate patterns).
+
+# Examples
+```julia
+dc = DataCache(:myproject; default_ttl = Dates.Hour(1))
+write!(dc, result; label = "query1")
+
+isstale(dc, "query1")   # false immediately after write
+# … one hour later …
+isstale(dc, "query1")   # true
+
+# Per-entry TTL overrides the cache default:
+write!(dc, result2; label = "short", ttl = Dates.Minute(5))
+isstale(dc, "short")    # true after 5 minutes
+```
+
+See also: [`invalidate!`](@ref), [`DataCaches.CacheAssets.purge!`](@ref).
+"""
+function isstale(cache::DataCache, entry::CacheEntry)::Bool
+    effective_ttl = !isnothing(entry.ttl) ? entry.ttl : cache.default_ttl
+    isnothing(effective_ttl) && return false
+    entry.datecached == typemin(DateTime) && return false
+    return entry.datecached + effective_ttl < Dates.now()
+end
+
+function isstale(cache::DataCache, label::AbstractString)::Bool
+    id = get(cache._by_label, label, nothing)
+    isnothing(id) && error("No cache entry with label $(repr(label))")
+    return isstale(cache, cache._index[id])
+end
+
+isstale(entry::CacheEntry)::Bool      = isstale(default_filecache(), entry)
+isstale(label::AbstractString)::Bool  = isstale(default_filecache(), label)
+
+# =============================================================================
+# invalidate! — bulk deletion by criteria
+# =============================================================================
+
+"""
+    invalidate!(cache::DataCache; kwargs...) → DataCache
+    invalidate!(; kwargs...) → DataCache
+
+Remove entries from `cache` that match the given criteria. All removals are
+batched into a single index rewrite.
+
+When called without a `cache` argument, uses [`default_filecache()`](@ref).
+
+# Filtering keyword arguments
+
+Entries are first selected by the standard filter set (same as [`entries`](@ref)):
+- `pattern` — `Regex` or `String`; matched against label, description, or UUID
+- `filepath_pattern` — `Regex` or `String`; matched against full file path
+- `filename_pattern` — `Regex` or `String`; matched against filename only
+- `format` — `String` or `Regex`; matched against the entry's format tag (`"csv"`, `"jls"`, …)
+- `before::DateTime` — entries cached before this time
+- `after::DateTime` — entries cached after this time
+- `accessed_before_date::DateTime` — entries last accessed before this time
+- `accessed_after_date::DateTime` — entries last accessed after this time
+- `labeled::Union{Nothing,Bool}` — `true` = labeled only; `false` = unlabeled only
+
+# Invalidation criteria
+
+- `stale::Bool = false` — further restrict to entries that are past their TTL
+- `predicate::Union{Nothing,Function} = nothing` — further restrict to entries where
+  `predicate(entry)` returns `true`
+
+# Options
+
+- `dry_run::Bool = false` — print matching entries to `io` without deleting
+- `io::IO = stdout` — output stream for `dry_run` messages
+
+# Examples
+```julia
+dc = DataCache(:myproject; default_ttl = Dates.Hour(24))
+
+# Remove all stale entries
+invalidate!(dc; stale = true)
+
+# Remove entries matching a label pattern
+invalidate!(dc; pattern = r"^temp_")
+
+# Remove CSV entries older than a week
+invalidate!(dc; format = "csv", before = Dates.now() - Dates.Day(7))
+
+# Remove entries matching a custom predicate
+invalidate!(dc; predicate = e -> startswith(e.description, "my_func("))
+
+# Preview what would be removed
+invalidate!(dc; stale = true, dry_run = true)
+```
+
+See also: [`isstale`](@ref), [`DataCaches.CacheAssets.purge!`](@ref).
+"""
+function invalidate!(cache::DataCache;
+                     pattern::Union{Nothing,Regex,AbstractString}          = nothing,
+                     filepath_pattern::Union{Nothing,Regex,AbstractString} = nothing,
+                     filename_pattern::Union{Nothing,Regex,AbstractString} = nothing,
+                     format::Union{Nothing,String,Regex}                   = nothing,
+                     before::Union{Nothing,DateTime}                       = nothing,
+                     after::Union{Nothing,DateTime}                        = nothing,
+                     accessed_before_date::Union{Nothing,DateTime}         = nothing,
+                     accessed_after_date::Union{Nothing,DateTime}          = nothing,
+                     labeled::Union{Nothing,Bool}                          = nothing,
+                     stale::Bool                                           = false,
+                     predicate::Union{Nothing,Function}                    = nothing,
+                     dry_run::Bool                                         = false,
+                     io::IO                                                = stdout)::DataCache
+    candidates, _ = CacheAssets._ls_select(cache;
+                                           pattern, filepath_pattern, filename_pattern, format,
+                                           before, after, accessed_before_date, accessed_after_date,
+                                           labeled, missing_file = false, sortby = :seq, rev = false)
+    stale && filter!(e -> isstale(cache, e), candidates)
+    !isnothing(predicate) && filter!(predicate, candidates)
+    if dry_run
+        if isempty(candidates)
+            println(io, "invalidate! (dry run): no entries match criteria")
+        else
+            println(io, "invalidate! (dry run): $(length(candidates)) entr$(length(candidates) == 1 ? "y" : "ies") would be removed:")
+            seq_width = ndigits(maximum(e.seq for e in candidates))
+            for e in candidates
+                lbl = !isempty(e.label) ? e.label : !isempty(e.description) ? e.description : "(unlabeled)"
+                println(io, "  [$(lpad(e.seq, seq_width))]  $(lbl)  $(e.path)")
+            end
+        end
+        return cache
+    end
+    for e in candidates
+        _remove_entry!(cache, e.id)
+    end
+    isempty(candidates) || _save_index(cache)
+    return cache
+end
+
+invalidate!(; kwargs...)::DataCache = invalidate!(default_filecache(); kwargs...)
+
+# =============================================================================
+# set_autopurge! / _run_autopurge!
+# =============================================================================
+
+"""
+    set_autopurge!(cache::DataCache; enabled=true, kwargs...) → DataCache
+    set_autopurge!(; enabled=true, kwargs...) → DataCache
+
+Configure an automatic purge policy on `cache`. After each [`write!`](@ref),
+the policy is applied to keep the cache within the specified limits.
+
+When called without a `cache` argument, uses [`default_filecache()`](@ref).
+
+Pass `enabled = false` to remove the current policy (disabling auto-purge).
+
+# Keyword arguments
+
+- `max_age::Union{Nothing,Period}` — remove entries older than this age (by `datecached`)
+- `max_idle::Union{Nothing,Period}` — remove entries not accessed within this period
+- `keep_count::Union{Nothing,Int}` — keep only the N most-recently-accessed entries
+- `max_size_bytes::Union{Nothing,Int}` — purge LRU entries until total cache size ≤ limit
+- `keep_labeled::Bool = false` — when `true`, labeled entries are never auto-purged
+
+# Examples
+```julia
+dc = DataCache(:myproject)
+
+# Keep only the 20 most recently accessed entries
+set_autopurge!(dc; keep_count = 20)
+
+# Remove entries older than 30 days, never delete labeled entries
+set_autopurge!(dc; max_age = Dates.Day(30), keep_labeled = true)
+
+# Disable auto-purge
+set_autopurge!(dc; enabled = false)
+```
+
+See also: [`DataCaches.CacheAssets.purge!`](@ref), [`invalidate!`](@ref).
+"""
+function set_autopurge!(cache::DataCache;
+                        enabled::Bool                      = true,
+                        max_age::Union{Nothing,Period}     = nothing,
+                        max_idle::Union{Nothing,Period}    = nothing,
+                        keep_count::Union{Nothing,Int}     = nothing,
+                        max_size_bytes::Union{Nothing,Int} = nothing,
+                        keep_labeled::Bool                 = false)::DataCache
+    if !enabled
+        cache._autopurge_policy = nothing
+        return cache
+    end
+    cache._autopurge_policy = PurgePolicy(max_age, max_idle, keep_count, max_size_bytes, keep_labeled)
+    return cache
+end
+
+set_autopurge!(; kwargs...)::DataCache = set_autopurge!(default_filecache(); kwargs...)
+
+# Internal: run the auto-purge policy after write!
+function _run_autopurge!(cache::DataCache)::Nothing
+    p = cache._autopurge_policy
+    isnothing(p) && return nothing
+    CacheAssets.purge!(cache;
+                       max_age        = p.max_age,
+                       max_idle       = p.max_idle,
+                       keep_count     = p.keep_count,
+                       max_size_bytes = p.max_size_bytes,
+                       keep_labeled   = p.keep_labeled)
+    return nothing
 end
 
 # =============================================================================
@@ -806,7 +1096,7 @@ function movecache!(cache::DataCache, new_path::AbstractString)
     for (id, key) in cache._index
         new_abs = joinpath(dst, relpath(key.path, src))
         cache._index[id] = CacheEntry(key.id, key.seq, key.label, new_abs,
-                                    key.format, key.description, key.datecached, key.dateaccessed)
+                                    key.format, key.description, key.datecached, key.dateaccessed, key.ttl)
     end
     return cache
 end
