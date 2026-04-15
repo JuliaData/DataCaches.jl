@@ -160,12 +160,14 @@ set_default_filecache!(cache::DataCache) = (
     set_active_autocache!(cache)
 )
 
-Base.eval(Caches, :(
-    defaultstore() = (
-        Base.depwarn("`Caches.defaultstore()` is deprecated; use `Caches.autocachestore()` instead.", :defaultstore);
-        autocachestore()
+Base.eval(
+    Caches, :(
+        defaultstore() = (
+            Base.depwarn("`Caches.defaultstore()` is deprecated; use `Caches.autocachestore()` instead.", :defaultstore);
+            autocachestore()
+        )
     )
-))
+)
 
 # ---------------------------------------------------------------------------
 # migrate_legacy_autocache — _DEFAULT/ → _AUTOCACHE/

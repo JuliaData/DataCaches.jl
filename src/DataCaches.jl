@@ -365,12 +365,14 @@ function DataCache(key::Symbol; track_access::Bool = true, default_ttl::Union{No
 end
 
 function DataCache()
-    throw(ArgumentError(
-        "DataCache() requires a name or path.\n" *
-        "  DataCache(:myproject)       # named store in the DataCaches depot\n" *
-        "  DataCache(\"/my/path\")       # explicit filesystem path\n" *
-        "  active_autocache()          # the active autocache store"
-    ))
+    throw(
+        ArgumentError(
+            "DataCache() requires a name or path.\n" *
+                "  DataCache(:myproject)       # named store in the DataCaches depot\n" *
+                "  DataCache(\"/my/path\")       # explicit filesystem path\n" *
+                "  active_autocache()          # the active autocache store"
+        )
+    )
 end
 
 """
