@@ -145,3 +145,52 @@ function migrate_v020_defaultcache(; conflict::Symbol = :skip)
 
     return true
 end
+
+# ---------------------------------------------------------------------------
+# Deprecated name wrappers — silent backward compat
+# ---------------------------------------------------------------------------
+
+default_filecache() = (
+    Base.depwarn("`default_filecache()` is deprecated; use `active_autocache()` instead.", :default_filecache);
+    active_autocache()
+)
+
+set_default_filecache!(cache::DataCache) = (
+    Base.depwarn("`set_default_filecache!` is deprecated; use `set_active_autocache!` instead.", :set_default_filecache!);
+    set_active_autocache!(cache)
+)
+
+Base.eval(Caches, :(
+    defaultstore() = (
+        Base.depwarn("`Caches.defaultstore()` is deprecated; use `Caches.autocachestore()` instead.", :defaultstore);
+        autocachestore()
+    )
+))
+
+# ---------------------------------------------------------------------------
+# migrate_legacy_autocache — _DEFAULT/ → _AUTOCACHE/
+# ---------------------------------------------------------------------------
+
+public migrate_legacy_autocache
+
+"""
+    DataCaches.migrate_legacy_autocache(; conflict::Symbol = :skip) → Bool
+
+Migrate from the pre-v0.5.0 `_DEFAULT` autocache store location to the current
+`_AUTOCACHE` location. Returns `true` if migration was performed, `false` if
+nothing to migrate. Safe to call multiple times (idempotent).
+"""
+function migrate_legacy_autocache(; conflict::Symbol = :skip)
+    old_path = joinpath(Caches._user_dir(), "_DEFAULT")
+    isdir(old_path) || return false
+    new_path = Caches.autocachestore()
+    if !isdir(new_path)
+        mkpath(dirname(new_path))
+        Base.mv(old_path, new_path)
+    else
+        dest = DataCache(new_path)
+        importcache!(dest, old_path; conflict = conflict)
+        Base.rm(old_path; recursive = true)
+    end
+    return true
+end
