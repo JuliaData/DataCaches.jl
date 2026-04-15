@@ -10,7 +10,7 @@ filesystem-style interface for managing individual *assets* (entries) within a
 `DataCaches.CacheAssets.<function>`.
 
 All functions accept an optional leading `DataCache` argument. When omitted,
-`default_filecache()` is used.
+`active_autocache()` is used.
 
 ## List assets
 
@@ -60,7 +60,7 @@ entries = CacheAssets.ls(dc; sortby = :dateaccessed_desc)  # least recently used
 entries = CacheAssets.ls(dc; sortby = :size_desc)          # largest first (requires stat)
 entries = CacheAssets.ls(dc; sortby = :label)
 
-# Use default cache (default_filecache())
+# Use autocache store (active_autocache())
 entries = CacheAssets.ls()
 entries = CacheAssets.ls(; sortby = :date_desc)
 

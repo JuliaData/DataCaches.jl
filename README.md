@@ -114,37 +114,10 @@ Pkg.add(url = "https://github.com/JuliaData/DataCaches.jl")
 
 There is a gradient from no setup approach to full control.
 
-#### The "No-setup" setup: the default cache
-
-In the no-setup approach, we do not explicitly open a cache 
-before running any of the cache operations, and a default
-"`:_DEFAULT`" cache will be used automatically, so this step 
-can be skipped.
-
- The default file cache is the cache that will be used if we do 
- NOT specify a cache explicitly is given by
- 
-```julia
-using DataCaches
-dc = DataCaches.default_filecache()
-```
-
-The default cache path will be located in the `DataCaches` module-scoped scratchspace in the Julia depot directory, 
-
-```
-/home/username/.julia/scratchspaces/c1455f2b-6d6f-4f37-b463-919f923708a5/caches/user/_DEFAULT
-```
-
-and is equivalent to the user creating a cache named "`:_DEFAULT`" using public cache creation mechanics:
-
-```julia
-dc = DataCache(:_DEFAULT)
-```
-
 #### A named cache in the `DataCaches` scratchspace depot
 
-This approach create caches that live inside DataCaches.jl's own depot,
-siloed from each other and the default :`:_DEFAULT`".
+This approach creates caches that live inside DataCaches.jl's own depot,
+siloed from each other.
 
 All these caches are automatically deleted if this package is 
 uninstalled and `Pkg.gc()` are run.
@@ -199,12 +172,12 @@ ENV["JULIA_DEBUG"] = "DataCaches"
 
 # Here we use a siloed project specific cache.
 dc = DataCache(:myproject)
-set_default_filecache!(dc)
+set_active_autocache!(dc)
 
-# If we did not run `set_default_filecache!` above
-# , then the default cache will be used in all 
-# the patterns below, with `dc` being given by:
-# dc = DataCaches.default_filecache()
+# If we did not run `set_active_autocache!` above,
+# the active autocache store will be used in all
+# the patterns below:
+# dc = DataCaches.active_autocache()
 
 # --- Pattern 1: @filecache — works with any function, no setup beyond the cache ---
 occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")  # fetches + stores
@@ -364,7 +337,7 @@ for inspecting and managing individual *entries* within a `DataCache`. It is pub
 but not exported; use `using DataCaches.CacheAssets` to bring it into scope.
 
 All functions accept an optional leading `DataCache` argument. When omitted,
-`default_filecache()` is used.
+`active_autocache()` is used.
 
 ```julia
 using DataCaches
@@ -459,7 +432,7 @@ The scratchspace uses a structured subdirectory layout:
 ~/.julia/scratchspaces/<DataCaches-UUID>/
   caches/
     user/
-      _DEFAULT/             ← DataCache() / DataCache(:_DEFAULT) default store
+      _AUTOCACHE/          ← active_autocache() store
       <name>/              ← DataCache(:name) stores
     module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
 ```
@@ -468,10 +441,10 @@ The scratchspace uses a structured subdirectory layout:
 using DataCaches
 
 # Inspect the scratchspace
-DataCaches.Caches.pwd()           # → "/home/user/.julia/scratchspaces/c1455f2b-..."
-DataCaches.Caches.defaultstore()  # → ".../c1455f2b-.../caches/user/_DEFAULT"
-DataCaches.Caches.ls()            # → [:user, :module]                          (caches root — default)
-DataCaches.Caches.ls(:user)       # → [:_DEFAULT, :myproject, :taxonomy, ...]    (user stores)
+DataCaches.Caches.pwd()              # → "/home/user/.julia/scratchspaces/c1455f2b-..."
+DataCaches.Caches.autocachestore()   # → ".../c1455f2b-.../caches/user/_AUTOCACHE"
+DataCaches.Caches.ls()              # → [:user, :module]                              (caches root — default)
+DataCaches.Caches.ls(:user)         # → [:_AUTOCACHE, :myproject, :taxonomy, ...]     (user stores)
 DataCaches.Caches.ls(:module)     # → [Symbol("uuid1/key1"), ...]               (module stores)
 DataCaches.Caches.ls!()           # prints caches root to stdout
 DataCaches.Caches.ls!(:user)      # prints user store names to stdout

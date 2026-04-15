@@ -67,6 +67,43 @@
 
 ### Changed
 
+#### Breaking changes
+
+- **`DataCache()` (no-argument form) now throws `ArgumentError`.**
+  A name or path is always required. Use `DataCache(:myproject)`,
+  `DataCache("/my/path")`, or `active_autocache()` instead.
+  The error message explains the alternatives.
+
+- **`default_filecache()` renamed to `active_autocache()`.**
+  The old name is gone; update all call sites.
+
+- **`set_default_filecache!(cache)` renamed to `set_active_autocache!(cache)`.**
+  The old name is gone; update all call sites.
+
+- **`Caches.defaultstore()` renamed to `Caches.autocachestore()`.**
+  The old name is gone; update any code that called it directly.
+
+- **`DATACACHES_DEFAULT_STORE` environment variable renamed to `DATACACHES_AUTOCACHE_STORE`.**
+  If you set this variable in shell profiles or scripts, rename it.
+
+- **On-disk directory `_DEFAULT/` renamed to `_AUTOCACHE/`.**
+  The autocache store previously lived at `<depot>/caches/user/_DEFAULT/`.
+  It now lives at `<depot>/caches/user/_AUTOCACHE/`.
+  If you have data in the old location, migrate it manually:
+
+  ```julia
+  DataCaches.Caches.mv(:_DEFAULT, :_AUTOCACHE)
+  ```
+
+  (Note: There is no *need* to do this)
+
+#### Internal changes
+
+- The two module-level refs `_filecache_ref` and `_autocache_cache_ref` have been
+  collapsed into a single `_active_autocache_ref`. Store resolution in
+  `_get_autocache_store` is now fully lazy: `active_autocache()` is called only
+  when needed, not eagerly captured in `set_autocaching!(true)`.
+
 - **`DataCache` struct**: Two new fields added — `default_ttl` and
   `_autopurge_policy`. The `DataCache` positional constructor unchanged; the
   named-arg constructor gains optional `default_ttl` kwarg.

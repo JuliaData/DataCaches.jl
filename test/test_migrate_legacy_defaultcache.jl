@@ -18,7 +18,7 @@
     @testset "returns false when legacy dir absent" begin
         mktempdir() do fake_home
             mktempdir() do fake_new
-                withenv("HOME" => fake_home, "DATACACHES_DEFAULT_STORE" => joinpath(fake_new, "store")) do
+                withenv("HOME" => fake_home, "DATACACHES_AUTOCACHE_STORE" => joinpath(fake_new, "store")) do
                     @test DataCaches.migrate_legacy_defaultcache() == false
                 end
             end
@@ -30,7 +30,7 @@
             mktempdir() do fake_new
                 legacy = _make_legacy_cache(fake_home)
                 new_store = joinpath(fake_new, "store")
-                withenv("HOME" => fake_home, "DATACACHES_DEFAULT_STORE" => new_store) do
+                withenv("HOME" => fake_home, "DATACACHES_AUTOCACHE_STORE" => new_store) do
                     @test DataCaches.migrate_legacy_defaultcache() == true
                     @test !isdir(legacy)
                     @test isdir(new_store)
@@ -50,7 +50,7 @@
                 # Pre-populate the new store with a different entry.
                 existing = DataCache(new_store)
                 write!(existing, [9, 9]; label = "existing_entry")
-                withenv("HOME" => fake_home, "DATACACHES_DEFAULT_STORE" => new_store) do
+                withenv("HOME" => fake_home, "DATACACHES_AUTOCACHE_STORE" => new_store) do
                     @test DataCaches.migrate_legacy_defaultcache() == true
                     @test !isdir(legacy)
                     c = DataCache(new_store)
@@ -75,7 +75,7 @@
                 new_c = DataCache(new_store)
                 write!(new_c, [9, 9]; label = "shared")
 
-                withenv("HOME" => fake_home, "DATACACHES_DEFAULT_STORE" => new_store) do
+                withenv("HOME" => fake_home, "DATACACHES_AUTOCACHE_STORE" => new_store) do
                     DataCaches.migrate_legacy_defaultcache(; conflict = :skip)
                     c = DataCache(new_store)
                     @test read(c, "shared") == [9, 9]  # current store wins
@@ -96,7 +96,7 @@
                 new_c = DataCache(new_store)
                 write!(new_c, [9, 9]; label = "shared")
 
-                withenv("HOME" => fake_home, "DATACACHES_DEFAULT_STORE" => new_store) do
+                withenv("HOME" => fake_home, "DATACACHES_AUTOCACHE_STORE" => new_store) do
                     DataCaches.migrate_legacy_defaultcache(; conflict = :overwrite)
                     c = DataCache(new_store)
                     @test read(c, "shared") == [1, 1]  # legacy wins
@@ -110,7 +110,7 @@
             mktempdir() do fake_new
                 _make_legacy_cache(fake_home)
                 new_store = joinpath(fake_new, "store")
-                withenv("HOME" => fake_home, "DATACACHES_DEFAULT_STORE" => new_store) do
+                withenv("HOME" => fake_home, "DATACACHES_AUTOCACHE_STORE" => new_store) do
                     @test DataCaches.migrate_legacy_defaultcache() == true
                     @test DataCaches.migrate_legacy_defaultcache() == false
                 end
@@ -131,7 +131,7 @@ end
             empty!(Base.DEPOT_PATH); push!(Base.DEPOT_PATH, fake_depot)
             try
                 mktempdir() do new_base
-                    withenv("DATACACHES_DEFAULT_STORE" => joinpath(new_base, "store")) do
+                    withenv("DATACACHES_AUTOCACHE_STORE" => joinpath(new_base, "store")) do
                         @test DataCaches.migrate_v020_defaultcache() == false
                     end
                 end
@@ -153,7 +153,7 @@ end
 
                 mktempdir() do new_base
                     new_store = joinpath(new_base, "store")
-                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                    withenv("DATACACHES_AUTOCACHE_STORE" => new_store) do
                         @test DataCaches.migrate_v020_defaultcache() == true
                         @test !isdir(old_path)
                         @test isdir(new_store)
@@ -182,7 +182,7 @@ end
                     new_store = joinpath(new_base, "store")
                     existing = DataCache(new_store)
                     write!(existing, [9, 9]; label = "existing_entry")
-                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                    withenv("DATACACHES_AUTOCACHE_STORE" => new_store) do
                         @test DataCaches.migrate_v020_defaultcache() == true
                         @test !isdir(old_path)
                         c = DataCache(new_store)
@@ -212,7 +212,7 @@ end
                     new_store = joinpath(new_base, "store")
                     new_c = DataCache(new_store)
                     write!(new_c, [9, 9]; label = "shared")
-                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                    withenv("DATACACHES_AUTOCACHE_STORE" => new_store) do
                         DataCaches.migrate_v020_defaultcache(; conflict = :skip)
                         c = DataCache(new_store)
                         @test read(c, "shared") == [9, 9]  # new store wins
@@ -238,7 +238,7 @@ end
                     new_store = joinpath(new_base, "store")
                     new_c = DataCache(new_store)
                     write!(new_c, [9, 9]; label = "shared")
-                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                    withenv("DATACACHES_AUTOCACHE_STORE" => new_store) do
                         DataCaches.migrate_v020_defaultcache(; conflict = :overwrite)
                         c = DataCache(new_store)
                         @test read(c, "shared") == [1, 1]  # v0.2.0 data wins
@@ -262,7 +262,7 @@ end
 
                 mktempdir() do new_base
                     new_store = joinpath(new_base, "store")
-                    withenv("DATACACHES_DEFAULT_STORE" => new_store) do
+                    withenv("DATACACHES_AUTOCACHE_STORE" => new_store) do
                         @test DataCaches.migrate_v020_defaultcache() == true
                         @test DataCaches.migrate_v020_defaultcache() == false
                     end

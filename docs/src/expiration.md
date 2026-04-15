@@ -58,8 +58,8 @@ when the cache is reloaded in a future session.
 ```julia
 isstale(dc, "query1")           # by label
 isstale(dc, entry)              # by CacheEntry
-isstale("query1")               # uses default_filecache()
-isstale(entry)                  # uses default_filecache()
+isstale("query1")               # uses active_autocache()
+isstale(entry)                  # uses active_autocache()
 ```
 
 Returns `false` when no TTL applies (neither per-entry nor cache default).
@@ -87,7 +87,7 @@ end
 
 [`invalidate!`](@ref) removes entries matching a set of criteria in a single
 batched index rewrite. When called without a `cache` argument, uses
-[`default_filecache()`](@ref).
+[`active_autocache()`](@ref).
 
 ### By staleness
 
@@ -271,10 +271,10 @@ set_autopurge!(dc; max_age = Day(30), keep_count = 100, keep_labeled = true)
 set_autopurge!(dc; enabled = false)
 ```
 
-### Using the default cache
+### Using the autocache store
 
 All functions accept a zero-argument form that operates on
-[`default_filecache()`](@ref):
+[`active_autocache()`](@ref):
 
 ```julia
 set_autopurge!(; keep_count = 20)

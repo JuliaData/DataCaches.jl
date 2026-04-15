@@ -300,7 +300,7 @@ using ZipFile
                 ep_key(ep) = DataCaches._autocache_key(identity, ep, (;))[1]
 
                 # No explicit user cache → package_cache is used
-                set_autocaching!(true)  # implicit: default_filecache(), NOT explicit
+                set_autocaching!(true)  # implicit: active_autocache(), NOT explicit
                 called = Ref(0)
                 fetch_fn = () -> (called[] += 1; DataFrame(x = [called[]]))
                 autocache(fetch_fn, identity, "ep_pkg", (;); package_cache = pkg_cache)
@@ -367,20 +367,32 @@ using ZipFile
             push!(Base.DEPOT_PATH, _fake_depot)
             try
 
-        @testset "default store is in Julia depot scratchspaces" begin
-            # When no env var is set, the default cache should live under the depot
-            depot_scratch = joinpath(first(Base.DEPOT_PATH), "scratchspaces")
-            c = DataCache()
-            @test startswith(c.store, depot_scratch)
-            @test isdir(c.store)
+        @testset "DataCache() no-arg throws ArgumentError" begin
+            @test_throws ArgumentError DataCache()
+            err = try DataCache(); nothing catch e; e end
+            @test err isa ArgumentError
+            @test contains(sprint(showerror, err), "active_autocache")
         end
 
-        @testset "DATACACHES_DEFAULT_STORE env var overrides Scratch.jl" begin
+        @testset "active_autocache() store is in Julia depot scratchspaces" begin
+            # When no env var is set, the autocache store should live under the depot
+            depot_scratch = joinpath(first(Base.DEPOT_PATH), "scratchspaces")
+            # Reset the cached ref so the fake depot is used
+            DataCaches._active_autocache_ref[] = nothing
+            c = active_autocache()
+            @test c isa DataCache
+            @test startswith(c.store, depot_scratch)
+            @test contains(c.store, "_AUTOCACHE")
+        end
+
+        @testset "DATACACHES_AUTOCACHE_STORE env var overrides Scratch.jl" begin
             mktempdir() do dir
-                withenv("DATACACHES_DEFAULT_STORE" => dir) do
-                    c = DataCache()
+                DataCaches._active_autocache_ref[] = nothing
+                withenv("DATACACHES_AUTOCACHE_STORE" => dir) do
+                    c = active_autocache()
                     @test c.store == abspath(dir)
                 end
+                DataCaches._active_autocache_ref[] = nothing
             end
         end
 
@@ -948,18 +960,18 @@ using ZipFile
             @test named == joinpath(root, "caches", "user", "mytest")
         end
 
-        @testset "defaultstore() respects DATACACHES_DEFAULT_STORE env var" begin
+        @testset "autocachestore() respects DATACACHES_AUTOCACHE_STORE env var" begin
             mktempdir() do dir
-                withenv("DATACACHES_DEFAULT_STORE" => dir) do
-                    @test DataCaches.Caches.defaultstore() == dir
+                withenv("DATACACHES_AUTOCACHE_STORE" => dir) do
+                    @test DataCaches.Caches.autocachestore() == dir
                 end
             end
         end
 
-        @testset "defaultstore() falls back to depot/caches/user/_DEFAULT" begin
-            withenv("DATACACHES_DEFAULT_STORE" => nothing) do
-                ds = DataCaches.Caches.defaultstore()
-                @test endswith(ds, joinpath("c1455f2b-6d6f-4f37-b463-919f923708a5", "caches", "user", "_DEFAULT"))
+        @testset "autocachestore() falls back to depot/caches/user/_AUTOCACHE" begin
+            withenv("DATACACHES_AUTOCACHE_STORE" => nothing) do
+                ds = DataCaches.Caches.autocachestore()
+                @test endswith(ds, joinpath("c1455f2b-6d6f-4f37-b463-919f923708a5", "caches", "user", "_AUTOCACHE"))
             end
         end
 
@@ -1168,10 +1180,10 @@ using ZipFile
             end
         end
 
-        @testset "default form uses default_filecache" begin
+        @testset "default form uses active_autocache" begin
             mktempdir() do dir
                 c = DataCache(dir)
-                set_default_filecache!(c)
+                set_active_autocache!(c)
                 write!(c, 99; label = "default_entries_test")
                 result = entries()
                 @test any(e -> e.label == "default_entries_test", result)
@@ -1334,10 +1346,10 @@ using ZipFile
             end
         end
 
-        @testset "single-arg form uses default_filecache" begin
+        @testset "single-arg form uses active_autocache" begin
             mktempdir() do dir
                 c = DataCache(dir)
-                set_default_filecache!(c)
+                set_active_autocache!(c)
                 write!(c, 7; label = "default_entry_test")
                 e = entry("default_entry_test")
                 @test e isa CacheEntry
@@ -1393,10 +1405,10 @@ using ZipFile
             end
         end
 
-        @testset "default form uses default_filecache" begin
+        @testset "default form uses active_autocache" begin
             mktempdir() do dir
                 c = DataCache(dir)
-                set_default_filecache!(c)
+                set_active_autocache!(c)
                 write!(c, 5; label = "default_labels_test")
                 @test "default_labels_test" in labels()
             end
@@ -1493,10 +1505,10 @@ using ZipFile
             end
         end
 
-        @testset "isstale — default filecache form" begin
+        @testset "isstale — active_autocache form" begin
             mktempdir() do dir
                 c = DataCache(dir)
-                set_default_filecache!(c)
+                set_active_autocache!(c)
                 e = write!(c, 99; label = "isstale_default_test")
                 @test !isstale(e)
                 @test !isstale("isstale_default_test")
@@ -1594,7 +1606,7 @@ using ZipFile
         @testset "invalidate! — default cache form" begin
             mktempdir() do dir
                 c = DataCache(dir)
-                set_default_filecache!(c)
+                set_active_autocache!(c)
                 write!(c, 99; label = "inval_default_test")
                 @test haskey(c, "inval_default_test")
                 invalidate!(; pattern = "inval_default_test")
@@ -1747,7 +1759,7 @@ using ZipFile
         @testset "purge! — default cache form" begin
             mktempdir() do dir
                 c = DataCache(dir)
-                set_default_filecache!(c)
+                set_active_autocache!(c)
                 e = write!(c, 1; label = "purge_default_test")
                 old = CacheEntry(e.id, e.seq, e.label, e.path, e.format, e.description,
                                  Dates.now() - Dates.Day(10), e.dateaccessed, nothing)
@@ -1806,7 +1818,7 @@ using ZipFile
         @testset "set_autopurge! — default cache form" begin
             mktempdir() do dir
                 c = DataCache(dir)
-                set_default_filecache!(c)
+                set_active_autocache!(c)
                 set_autopurge!(; keep_count = 2)
                 @test !isnothing(c._autopurge_policy)
                 set_autopurge!(; enabled = false)

@@ -48,10 +48,9 @@ pkg> add DataCaches
 
 ### Cache store
 
-First, create a `DataCache`. The simplest form requires no configuration:
+First, create a `DataCache`. A name or path is always required:
 
 ```julia
-dc = DataCache()                                         # lifecycle-managed default
 dc = DataCache(:myproject)                               # named, no path management
 dc = DataCache(joinpath(homedir(), ".datacaches", "p1")) # explicit path
 ```
@@ -64,7 +63,7 @@ using DataCaches
 dc = DataCache(:myproject)
 
 # Memoized — works with any function, just wrap the call
-set_default_filecache!(dc)
+set_active_autocache!(dc)
 result = @filecache some_expensive_query(; taxon = "Dinosauria")  # fetches + stores
 result = @filecache some_expensive_query(; taxon = "Dinosauria")  # from cache
 result = @filecache! some_expensive_query(; taxon = "Dinosauria") # force refresh

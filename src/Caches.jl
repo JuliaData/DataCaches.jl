@@ -36,18 +36,19 @@ pwd() = _root()
 pwd(name::Symbol) = joinpath(_user_dir(), string(name))
 
 """
-    DataCaches.Caches.defaultstore() → String
+    DataCaches.Caches.autocachestore() → String
 
-Return the absolute path to the default [`DataCache`](@ref DataCaches.DataCache) store.
+Return the absolute path to the active autocache store.
 
-Respects the `DATACACHES_DEFAULT_STORE` environment variable; otherwise returns
-the path of the `_DEFAULT` store inside `<root>/caches/user/>`.
+Respects the `DATACACHES_AUTOCACHE_STORE` environment variable; otherwise returns
+the path of the `_AUTOCACHE` store inside `<root>/caches/user/`.
 
-Unlike `DataCache()`, this function does not create the directory.
+Unlike [`active_autocache`](@ref DataCaches.active_autocache), this function does
+not create the directory.
 """
-function defaultstore()
-    haskey(ENV, "DATACACHES_DEFAULT_STORE") && return ENV["DATACACHES_DEFAULT_STORE"]
-    return joinpath(_user_dir(), "_DEFAULT")
+function autocachestore()
+    haskey(ENV, "DATACACHES_AUTOCACHE_STORE") && return ENV["DATACACHES_AUTOCACHE_STORE"]
+    return joinpath(_user_dir(), "_AUTOCACHE")
 end
 
 """

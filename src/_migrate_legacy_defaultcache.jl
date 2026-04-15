@@ -10,19 +10,21 @@ public migrate_v020_defaultcache
 
 Migrate the default cache from its pre-Scratch.jl location to the current default store.
 
-Before DataCaches.jl integrated with Scratch.jl (prior to v0.2.0), the no-argument
-`DataCache()` constructor stored data at:
+Before DataCaches.jl integrated with Scratch.jl (prior to v0.2.0), autocached data
+was stored at:
 
     ~/.cache/DataCaches/_DEFAULT/
 
-After Scratch.jl integration the default moved to the managed scratchspace:
+After Scratch.jl integration (v0.2.0+) the autocache store moved to the managed
+scratchspace:
 
-    ~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_DEFAULT/
+    ~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_AUTOCACHE/
 
-(or the path given by `DATACACHES_DEFAULT_STORE` if that environment variable is set).
+(or the path given by `DATACACHES_AUTOCACHE_STORE` if that environment variable is set).
 
-Call this function once after upgrading to v0.2.0 to move any data accumulated under the
-old location into the new one. It is safe to call multiple times (idempotent).
+Call this function once after upgrading from pre-v0.2.0 to move any data accumulated
+under the old location into the current autocache store. It is safe to call multiple
+times (idempotent).
 
 **Return value:**
 
@@ -32,10 +34,10 @@ old location into the new one. It is safe to call multiple times (idempotent).
 **Migration strategy:**
 
   - If the legacy directory does not exist, returns `false` immediately.
-  - If the current default store does not yet exist, the legacy directory is moved
+  - If the current autocache store does not yet exist, the legacy directory is moved
     wholesale via `Base.mv` — no re-indexing, no data copying.
-  - If the current default store already exists (e.g. `DataCache()` was already used
-    after upgrading), all entries from the legacy directory are imported via
+  - If the current autocache store already exists (e.g. `active_autocache()` was
+    already called after upgrading), all entries from the legacy directory are imported via
     [`importcache!`](@ref) and then the legacy directory is removed. The `conflict`
     keyword controls label collisions between the two stores.
 
@@ -58,7 +60,7 @@ function migrate_legacy_defaultcache(; conflict::Symbol = :skip)
     legacy_path = joinpath(homedir(), ".cache", "DataCaches", "_DEFAULT")
     isdir(legacy_path) || return false
 
-    new_path = Caches.defaultstore()  # respects DATACACHES_DEFAULT_STORE
+    new_path = Caches.autocachestore()  # respects DATACACHES_AUTOCACHE_STORE
 
     if !isdir(new_path)
         # New store does not exist yet — move the whole directory wholesale.
@@ -79,18 +81,19 @@ end
 
 Migrate the default cache from its v0.2.0 location to the current default store.
 
-In DataCaches.jl v0.2.0, the no-argument `DataCache()` constructor stored data at:
+In DataCaches.jl v0.2.0, autocached data was stored at:
 
     <depot>/caches/defaultcache/
 
-In v0.3.0+ the default moved into the user silo:
+In v0.3.0+ the autocache store moved into the user silo:
 
-    <depot>/caches/user/_DEFAULT/
+    <depot>/caches/user/_AUTOCACHE/
 
-(or the path given by `DATACACHES_DEFAULT_STORE` if that environment variable is set).
+(or the path given by `DATACACHES_AUTOCACHE_STORE` if that environment variable is set).
 
-Call this function once after upgrading to move any data accumulated under the old
-location into the new one. It is safe to call multiple times (idempotent).
+Call this function once after upgrading from v0.2.0 to move any data accumulated under
+the old location into the current autocache store. It is safe to call multiple times
+(idempotent).
 
 **Return value:**
 
@@ -102,8 +105,8 @@ location into the new one. It is safe to call multiple times (idempotent).
   - If the v0.2.0 directory does not exist, returns `false` immediately.
   - If the new location does not yet exist, the v0.2.0 directory is moved wholesale
     via `Base.mv` — no re-indexing, no data copying.
-  - If the new location already has data (e.g. `DataCache()` was already used after
-    upgrading), all entries are imported via [`importcache!`](@ref) and then the v0.2.0
+  - If the new location already has data (e.g. `active_autocache()` was already called
+    after upgrading), all entries are imported via [`importcache!`](@ref) and then the v0.2.0
     directory is removed. The `conflict` keyword controls label collisions.
 
 **`conflict` keyword** (applies only when both stores already contain data):
@@ -123,11 +126,11 @@ DataCaches.migrate_v020_defaultcache(; conflict = :overwrite)
 """
 function migrate_v020_defaultcache(; conflict::Symbol = :skip)
     # The v0.2.0 path is always <depot>/caches/defaultcache/,
-    # regardless of DATACACHES_DEFAULT_STORE.
+    # regardless of DATACACHES_AUTOCACHE_STORE.
     old_path = joinpath(Caches._caches_dir(), "defaultcache")
     isdir(old_path) || return false
 
-    new_path = Caches.defaultstore()  # respects DATACACHES_DEFAULT_STORE
+    new_path = Caches.autocachestore()  # respects DATACACHES_AUTOCACHE_STORE
 
     if !isdir(new_path)
         # New store does not exist yet — move the whole directory wholesale.

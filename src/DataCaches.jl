@@ -16,7 +16,7 @@ export write!, relabel!, reindexcache!, keylabels, keypaths, clear!, showcache, 
 export entries, entry, labels
 export isstale, invalidate!, set_autopurge!
 export @filecache, @filecache!, @memcache
-export default_filecache, set_default_filecache!, memcache_clear!
+export active_autocache, set_active_autocache!, memcache_clear!
 export set_autocaching!
 export autocache
 export scratch_datacache!
@@ -252,7 +252,7 @@ end
 # =============================================================================
 
 """
-    DataCache([store::AbstractString]; track_access=true)
+    DataCache(store::AbstractString; track_access=true)
     DataCache(key::Symbol; track_access=true)
 
 A labeled, file-backed key-value store for caching query results across
@@ -262,11 +262,9 @@ Data is persisted in `store` as CSV files (for `DataFrame` values) or
 serialized Julia objects (`.jls`) for anything else. An index file
 (`cache_index.toml`) in `store` keeps track of all entries.
 
-**No argument:** the store is placed in the user silo of DataCaches' depot at
-`~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/_DEFAULT/`,
-automatically cleaned up if DataCaches.jl is uninstalled and `Pkg.gc()` is run.
-Set the `DATACACHES_DEFAULT_STORE` environment variable to override this location.
-`DataCache()` is equivalent to `DataCache(:_DEFAULT)`.
+A `store` argument is always required. To access the shared autocache store
+used by [`@filecache`](@ref), [`set_autocaching!`](@ref), and similar mechanisms,
+call [`active_autocache()`](@ref) instead.
 
 **Symbol argument (`DataCache(:name)`):** creates a named user store within
 DataCaches.jl's own depot directory (`~/.julia/scratchspaces/<DataCaches-UUID>/caches/user/<name>/`).
@@ -296,11 +294,12 @@ frequently or have many entries.
 
 # Examples
 ```julia
-cache = DataCache()                        # default store: caches/user/_DEFAULT/
-cache = DataCache(:_DEFAULT)                # same as DataCache() — the default store
 cache = DataCache(:myproject)              # named store: caches/user/myproject/
 cache = DataCache("/my/project/cache")     # explicit filesystem path
 cache = DataCache(:logs; track_access = false)  # disable access-time recording
+
+# Access the active autocache store
+cache = active_autocache()
 
 # Write
 key = write!(cache, df)
@@ -344,15 +343,8 @@ end
 const _INDEX_FILENAME = "cache_index.toml"
 const _DATACACHES_UUID = Base.UUID("c1455f2b-6d6f-4f37-b463-919f923708a5")
 
-function _default_cache_dir()
-    haskey(ENV, "DATACACHES_DEFAULT_STORE") && return ENV["DATACACHES_DEFAULT_STORE"]
-    store = joinpath(Caches._user_dir(), "_DEFAULT")
-    mkpath(store)
-    return store
-end
-
 function DataCache(
-        store::AbstractString = _default_cache_dir();
+        store::AbstractString;
         track_access::Bool = true,
         default_ttl::Union{Nothing, Period} = nothing
     )
@@ -370,6 +362,15 @@ end
 function DataCache(key::Symbol; track_access::Bool = true, default_ttl::Union{Nothing, Period} = nothing)
     store = joinpath(Caches._user_dir(), string(key))
     return DataCache(store; track_access, default_ttl)
+end
+
+function DataCache()
+    throw(ArgumentError(
+        "DataCache() requires a name or path.\n" *
+        "  DataCache(:myproject)       # named store in the DataCaches depot\n" *
+        "  DataCache(\"/my/path\")       # explicit filesystem path\n" *
+        "  active_autocache()          # the active autocache store"
+    ))
 end
 
 """
@@ -897,8 +898,8 @@ function isstale(cache::DataCache, label::AbstractString)::Bool
     return isstale(cache, cache._index[id])
 end
 
-isstale(entry::CacheEntry)::Bool = isstale(default_filecache(), entry)
-isstale(label::AbstractString)::Bool = isstale(default_filecache(), label)
+isstale(entry::CacheEntry)::Bool = isstale(active_autocache(), entry)
+isstale(label::AbstractString)::Bool = isstale(active_autocache(), label)
 
 # =============================================================================
 # invalidate! — bulk deletion by criteria
@@ -911,7 +912,7 @@ isstale(label::AbstractString)::Bool = isstale(default_filecache(), label)
 Remove entries from `cache` that match the given criteria. All removals are
 batched into a single index rewrite.
 
-When called without a `cache` argument, uses [`default_filecache()`](@ref).
+When called without a `cache` argument, uses [`active_autocache()`](@ref).
 
 # Filtering keyword arguments
 
@@ -1003,7 +1004,7 @@ function invalidate!(
     return cache
 end
 
-invalidate!(; kwargs...)::DataCache = invalidate!(default_filecache(); kwargs...)
+invalidate!(; kwargs...)::DataCache = invalidate!(active_autocache(); kwargs...)
 
 # =============================================================================
 # set_autopurge! / _run_autopurge!
@@ -1016,7 +1017,7 @@ invalidate!(; kwargs...)::DataCache = invalidate!(default_filecache(); kwargs...
 Configure an automatic purge policy on `cache`. After each [`write!`](@ref),
 the policy is applied to keep the cache within the specified limits.
 
-When called without a `cache` argument, uses [`default_filecache()`](@ref).
+When called without a `cache` argument, uses [`active_autocache()`](@ref).
 
 Pass `enabled = false` to remove the current policy (disabling auto-purge).
 
@@ -1061,7 +1062,7 @@ function set_autopurge!(
     return cache
 end
 
-set_autopurge!(; kwargs...)::DataCache = set_autopurge!(default_filecache(); kwargs...)
+set_autopurge!(; kwargs...)::DataCache = set_autopurge!(active_autocache(); kwargs...)
 
 # Internal: run the auto-purge policy after write!
 function _run_autopurge!(cache::DataCache)::Nothing
@@ -1258,36 +1259,55 @@ end
 
 # Module-level stores
 const _memcache_store = Dict{UInt64, Any}()
-const _filecache_ref = Ref{Union{DataCache, Nothing}}(nothing)
+const _active_autocache_ref = Ref{Union{DataCache, Nothing}}(nothing)
 
 # Autocache state
 const _autocache_enabled_ref = Ref{Bool}(false)
-const _autocache_cache_ref = Ref{Union{DataCache, Nothing}}(nothing)
-const _autocache_cache_explicit = Ref{Bool}(false)   # true iff user passed cache= explicitly
+const _autocache_cache_explicit = Ref{Bool}(false)   # true iff user passed cache= explicitly to set_autocaching!
 # nothing = all functions (global mode); Set = per-function allowlist
 const _autocache_funcs_ref = Ref{Union{Nothing, Set{Any}}}(nothing)
 
 """
-    default_filecache() → DataCache
+    active_autocache() → DataCache
 
-Return the module-level default [`DataCache`](@ref) used by [`@filecache`](@ref).
-Created lazily on first access using the default Scratch.jl-backed store
-(see [`DataCache`](@ref) for details on the default location).
+Return the active autocache store used by [`@filecache`](@ref), [`@filecache!`](@ref),
+[`autocache`](@ref), and the no-argument forms of [`entries`](@ref), [`entry`](@ref),
+[`labels`](@ref), [`isstale`](@ref), [`invalidate!`](@ref), and [`set_autopurge!`](@ref).
+
+The store is resolved lazily on first call. Resolution order:
+
+1. A store explicitly set by [`set_active_autocache!`](@ref) or
+   `set_autocaching!(true; cache=x)` — if either was called, that store is returned.
+2. Otherwise, the `DATACACHES_AUTOCACHE_STORE` environment variable — if set, opens
+   a `DataCache` at that path.
+3. Otherwise, the named store `DataCache(:_AUTOCACHE)` inside DataCaches.jl's own
+   scratchspace (`<depot>/caches/user/_AUTOCACHE/`).
+
+To permanently redirect the autocache store, call [`set_active_autocache!`](@ref).
 """
-function default_filecache()
-    if isnothing(_filecache_ref[])
-        _filecache_ref[] = DataCache()
+function active_autocache()::DataCache
+    if isnothing(_active_autocache_ref[])
+        if haskey(ENV, "DATACACHES_AUTOCACHE_STORE")
+            _active_autocache_ref[] = DataCache(ENV["DATACACHES_AUTOCACHE_STORE"])
+        else
+            _active_autocache_ref[] = DataCache(:_AUTOCACHE)
+        end
     end
-    return _filecache_ref[]
+    return _active_autocache_ref[]
 end
 
 """
-    set_default_filecache!(cache::DataCache)
+    set_active_autocache!(cache::DataCache) → DataCache
 
-Replace the module-level default cache used by [`@filecache`](@ref).
+Set the module-level autocache store used by [`@filecache`](@ref), [`@filecache!`](@ref),
+[`autocache`](@ref), and all no-argument inspection functions.
+
+Unlike `set_autocaching!(true; cache=x)`, this function does not enable autocaching
+for instrumented library functions — it only redirects the store used by the macros
+and inspection helpers.
 """
-function set_default_filecache!(cache::DataCache)
-    _filecache_ref[] = cache
+function set_active_autocache!(cache::DataCache)::DataCache
+    _active_autocache_ref[] = cache
     return cache
 end
 
@@ -1309,33 +1329,38 @@ When `enabled=true`, every call to an instrumented function automatically stores
 result in a [`DataCache`](@ref) and returns the cached result on subsequent identical
 calls.
 
-Pass `cache` to use a specific store; that cache is then used regardless of any
-`package_cache` the library supplies. When `cache` is omitted, store resolution is
-deferred to the `autocache` call site: any `package_cache` supplied by the library
-takes priority, with [`default_filecache()`](@ref) as the final fallback.
+Pass `cache` to pin a specific store; that cache is then used regardless of any
+`package_cache` the library supplies, and the `_autocache_cache_explicit` flag is set.
+When `cache` is omitted, store resolution is deferred lazily to each `autocache` call
+site: any `package_cache` supplied by the library takes priority, with
+[`active_autocache()`](@ref) as the final fallback.
 
-Returns the active [`DataCache`](@ref) when enabling with an explicit `cache`, or
-`nothing` when disabling (or when enabling without an explicit `cache`, in which case
-store selection is deferred).
+Returns the pinned [`DataCache`](@ref) when `cache` is given, or `nothing` otherwise.
 
 # Examples
 ```julia
-set_autocaching!(true)                                  # library default or default_filecache()
+set_autocaching!(true)                                        # library default or active_autocache()
 set_autocaching!(false)
-set_autocaching!(true; cache=DataCache("/my/project/cache"))  # explicit store
+set_autocaching!(true; cache=DataCache("/my/project/cache"))  # pin explicit store
 ```
 """
 function set_autocaching!(enabled::Bool; cache::Union{DataCache, Nothing} = nothing)
     _autocache_enabled_ref[] = enabled
     _autocache_funcs_ref[] = nothing  # global mode
     if enabled
-        _autocache_cache_ref[] = isnothing(cache) ? default_filecache() : cache
-        _autocache_cache_explicit[] = !isnothing(cache)
+        if !isnothing(cache)
+            _active_autocache_ref[] = cache
+            _autocache_cache_explicit[] = true
+        else
+            _autocache_cache_explicit[] = false
+        end
     else
-        _autocache_cache_ref[] = nothing
+        if _autocache_cache_explicit[]
+            _active_autocache_ref[] = nothing
+        end
         _autocache_cache_explicit[] = false
     end
-    return _autocache_cache_ref[]
+    return _autocache_cache_explicit[] ? _active_autocache_ref[] : nothing
 end
 
 """
@@ -1354,7 +1379,7 @@ If the allowlist becomes empty, autocache is fully disabled.
 **Note:** `set_autocaching!(false, func)` has no effect when global autocache is on; call
 `set_autocaching!(false)` to disable globally.
 
-Returns the active [`DataCache`](@ref), or `nothing` when fully disabled.
+Returns the pinned [`DataCache`](@ref) if one was set via `cache=`, or `nothing` otherwise.
 
 # Examples
 ```julia
@@ -1366,9 +1391,11 @@ DataCaches.set_autocaching!(false, pbdb_occurrences)
 function set_autocaching!(enabled::Bool, func; cache::Union{DataCache, Nothing} = nothing)
     if enabled
         _autocache_enabled_ref[] = true
-        if isnothing(_autocache_cache_ref[]) || !isnothing(cache)
-            _autocache_cache_ref[] = isnothing(cache) ? default_filecache() : cache
-            _autocache_cache_explicit[] = !isnothing(cache)
+        if !isnothing(cache)
+            _active_autocache_ref[] = cache
+            _autocache_cache_explicit[] = true
+        elseif !_autocache_cache_explicit[]
+            # leave _active_autocache_ref[] as-is (lazy resolution on use)
         end
         existing = _autocache_funcs_ref[]
         if isnothing(existing)
@@ -1381,24 +1408,26 @@ function set_autocaching!(enabled::Bool, func; cache::Union{DataCache, Nothing} 
         if isnothing(existing)
             @warn "set_autocaching!(false, func) has no effect when global autocache is active. " *
                 "Call set_autocaching!(false) to disable autocache globally."
-            return _autocache_cache_ref[]
+            return _autocache_cache_explicit[] ? _active_autocache_ref[] : nothing
         end
         delete!(existing, func)
         if isempty(existing)
             _autocache_enabled_ref[] = false
             _autocache_funcs_ref[] = nothing
-            _autocache_cache_ref[] = nothing
+            if _autocache_cache_explicit[]
+                _active_autocache_ref[] = nothing
+            end
             _autocache_cache_explicit[] = false
         end
     end
-    return _autocache_cache_ref[]
+    return _autocache_cache_explicit[] ? _active_autocache_ref[] : nothing
 end
 
 function set_autocaching!(enabled::Bool, funcs::AbstractVector; cache::Union{DataCache, Nothing} = nothing)
     for f in funcs
         set_autocaching!(enabled, f; cache = cache)
     end
-    return _autocache_cache_ref[]
+    return _autocache_cache_explicit[] ? _active_autocache_ref[] : nothing
 end
 
 # Internal helpers — not exported
@@ -1413,15 +1442,13 @@ function _autocache_active(func)
     return func in funcs
 end
 
-function _get_autocache_store(package_cache::Union{DataCache, Nothing} = nothing)
-    # User explicitly passed cache= to set_autocaching! → always wins
-    _autocache_cache_explicit[] && return _autocache_cache_ref[]
+function _get_autocache_store(package_cache::Union{DataCache, Nothing} = nothing)::DataCache
+    # User explicitly pinned a store via set_autocaching!(true; cache=x) → always wins
+    _autocache_cache_explicit[] && return _active_autocache_ref[]
     # Library supplied a package-specific default → use it
     isnothing(package_cache) || return package_cache
-    # Fall through to whatever set_autocaching! resolved (default_filecache())
-    c = _autocache_cache_ref[]
-    isnothing(c) && error("Autocache is enabled but no cache is configured.")
-    return c
+    # Fall through to active_autocache() — lazy, always reflects current state
+    return active_autocache()
 end
 
 function _autocache_key(func, endpoint, kwargs)
@@ -1456,14 +1483,14 @@ If autocache is not active for `func`, calls `fetch_fn()` directly.
                     `cache` to [`set_autocaching!`](@ref). Allows a library to default
                     to its own [`scratch_datacache!`](@ref)-backed store while still
                     letting the user override via `set_autocaching!(true; cache=x)`.
-                    Pass `nothing` (default) to fall through to [`default_filecache()`](@ref).
+                    Pass `nothing` (default) to fall through to [`active_autocache()`](@ref).
 - `force_refresh`:  When `true`, bypasses the hit check and overwrites any existing entry.
 
 # Store resolution priority
 
 1. User-explicit: `set_autocaching!(true; cache=x)` → always uses `x`
 2. `package_cache` kwarg → used when no explicit user cache was set
-3. [`default_filecache()`](@ref) → final fallback
+3. [`active_autocache()`](@ref) → final fallback (lazy)
 """
 function autocache(
         fetch_fn, func, endpoint, kwargs;
@@ -1577,7 +1604,7 @@ Evaluate `expr` (a function call) and store the result in a
 Subsequent calls with identical arguments load from cache without
 executing the function again.
 
-The one-argument form uses [`default_filecache()`](@ref). Pass an explicit
+The one-argument form uses [`active_autocache()`](@ref). Pass an explicit
 `DataCache` as the first argument to use a different store.
 
 # Examples
@@ -1589,7 +1616,7 @@ occs = @filecache my_cache pbdb_occurrences(base_name="Canidae")
 ```
 """
 macro filecache(expr)
-    return _filecache_impl(expr, :(default_filecache()))
+    return _filecache_impl(expr, :(active_autocache()))
 end
 
 macro filecache(cache, expr)
@@ -1624,7 +1651,7 @@ Evaluate `expr` (a function call), **unconditionally** store the result in a
 macro always re-executes the function and overwrites any existing cached entry,
 making it useful for forcing a cache refresh.
 
-The one-argument form uses [`default_filecache()`](@ref). Pass an explicit
+The one-argument form uses [`active_autocache()`](@ref). Pass an explicit
 `DataCache` as the first argument to target a specific store.
 
 A `@debug` message is emitted (visible when `ENV["JULIA_DEBUG"] = "DataCaches"`)
@@ -1632,7 +1659,7 @@ announcing the update.
 
 # Examples
 ```julia
-# Force-refresh the default cache
+# Force-refresh the autocache store
 occs = @filecache! pbdb_occurrences(base_name="Canidae", show="full")
 
 # Force-refresh a specific cache
@@ -1641,7 +1668,7 @@ occs = @filecache! my_cache pbdb_occurrences(base_name="Canidae")
 ```
 """
 macro filecache!(expr)
-    return _filecache_refresh_impl(expr, :(default_filecache()))
+    return _filecache_refresh_impl(expr, :(active_autocache()))
 end
 
 macro filecache!(cache, expr)
@@ -1663,7 +1690,7 @@ include("_migrate_legacy_defaultcache.jl")
 
 Return the entries of `cache` as a `Vector{`[`CacheEntry`](@ref)`}`, optionally
 filtered and sorted. When called without a `cache` argument, uses
-[`default_filecache()`](@ref).
+[`active_autocache()`](@ref).
 
 This is the primary function for inspecting a cache's contents. Use
 [`entry`](@ref) to look up a single entry by label or index, and
@@ -1699,14 +1726,14 @@ recent        = entries(dc; after = DateTime("2026-01-01T00:00:00"))
 lru           = entries(dc; sortby = :dateaccessed_desc)   # oldest-accessed first
 large_first   = entries(dc; sortby = :size_desc)
 canidae       = entries(dc; pattern = r"canidae")
-entries()                                                   # default cache
+entries()                                                   # autocache store
 ```
 
 See also: [`entry`](@ref), [`labels`](@ref), [`keys`](@ref),
 [`DataCaches.CacheAssets.ls`](@ref).
 """
 entries(cache::DataCache; kwargs...) = CacheAssets.ls(cache; kwargs...)
-entries(; kwargs...) = entries(default_filecache(); kwargs...)
+entries(; kwargs...) = entries(active_autocache(); kwargs...)
 
 """
     entry(cache::DataCache, label::AbstractString) → CacheEntry
@@ -1714,7 +1741,7 @@ entries(; kwargs...) = entries(default_filecache(); kwargs...)
     entry(spec) → CacheEntry
 
 Look up a single [`CacheEntry`](@ref) by label string or sequence index `n`.
-When called with a single non-`DataCache` argument, uses [`default_filecache()`](@ref).
+When called with a single non-`DataCache` argument, uses [`active_autocache()`](@ref).
 
 Throws a `KeyError` if no matching entry exists.
 
@@ -1724,8 +1751,8 @@ dc = DataCache(:myproject)
 
 e = entry(dc, "dinosaurs")   # by label
 e = entry(dc, 3)             # by sequence index
-e = entry("dinosaurs")       # default cache, by label
-e = entry(2)                 # default cache, by index
+e = entry("dinosaurs")       # autocache store, by label
+e = entry(2)                 # autocache store, by index
 ```
 
 See also: [`entries`](@ref), [`write!`](@ref)
@@ -1742,7 +1769,7 @@ function entry(cache::DataCache, n::Integer)
     return e
 end
 
-entry(spec) = entry(default_filecache(), spec)
+entry(spec) = entry(active_autocache(), spec)
 
 """
     labels(cache::DataCache) → Vector{String}
@@ -1750,7 +1777,7 @@ entry(spec) = entry(default_filecache(), spec)
 
 Return all user-assigned labels for entries in `cache`, excluding unlabeled entries
 (those keyed only by an auto-generated hash). When called without arguments, uses
-[`default_filecache()`](@ref).
+[`active_autocache()`](@ref).
 
 # Examples
 ```julia
@@ -1759,12 +1786,12 @@ dc["foo"] = 1
 dc["bar"] = 2
 
 labels(dc)   # → ["foo", "bar"] (order may vary)
-labels()     # default cache
+labels()     # autocache store
 ```
 
 See also: [`entries`](@ref), [`keylabels`](@ref).
 """
 labels(cache::DataCache) = collect(keys(cache._by_label))
-labels() = labels(default_filecache())
+labels() = labels(active_autocache())
 
 end # module

@@ -1,6 +1,6 @@
 module CacheAssets
 
-import ..DataCaches: DataCache, CacheEntry, CacheEntry, default_filecache,
+import ..DataCaches: DataCache, CacheEntry, CacheEntry, active_autocache,
     _read_file, _remove_entry!, _save_index,
     _resolve_by_seq, write!, isstale
 import Dates
@@ -201,7 +201,7 @@ end
     DataCaches.CacheAssets.ls([cache::DataCache]; kwargs...) → Vector{CacheEntry}
 
 Return a filtered and sorted vector of cache entries from `cache`.
-If `cache` is omitted, the active default cache is used (see `default_filecache()`).
+If `cache` is omitted, the active default cache is used (see `active_autocache()`).
 
 !!! note
     [`DataCaches.entries`](@ref) exposes the same functionality at the top level
@@ -258,13 +258,13 @@ function ls(
     return entries
 end
 
-ls(; kwargs...) = ls(default_filecache(); kwargs...)
+ls(; kwargs...) = ls(active_autocache(); kwargs...)
 
 """
     DataCaches.CacheAssets.ls!([cache::DataCache]; kwargs...) → nothing
 
 Print a formatted listing of assets in `cache` to `io` (default `stdout`).
-If `cache` is omitted, the active default cache is used (see `default_filecache()`).
+If `cache` is omitted, the active default cache is used (see `active_autocache()`).
 
 Accepts all the same filtering and sorting keyword arguments as [`ls`](@ref), plus:
 
@@ -305,7 +305,7 @@ function ls!(
     return nothing
 end
 
-ls!(; kwargs...) = ls!(default_filecache(); kwargs...)
+ls!(; kwargs...) = ls!(active_autocache(); kwargs...)
 
 # =============================================================================
 # rm — remove assets
@@ -356,8 +356,8 @@ function rm(cache::DataCache, specs::AbstractVector; force::Bool = false)
     return cache
 end
 
-rm(assets...; kwargs...) = rm(default_filecache(), assets...; kwargs...)
-rm(specs::AbstractVector; kwargs...) = rm(default_filecache(), specs; kwargs...)
+rm(assets...; kwargs...) = rm(active_autocache(), assets...; kwargs...)
+rm(specs::AbstractVector; kwargs...) = rm(active_autocache(), specs; kwargs...)
 
 # =============================================================================
 # mv — relabel within cache OR move to another cache
@@ -386,7 +386,7 @@ sequence number, and `datecached` timestamp), then remove it from `src_cache`.
 The `label` kwarg overrides the destination label (default: preserve the original).
 Pass `force=true` to overwrite an existing entry with the same label in `dest_cache`.
 
-If `src_cache` is omitted, `default_filecache()` is used as the source.
+If `src_cache` is omitted, `active_autocache()` is used as the source.
 """
 function mv(cache::DataCache, src, dest::AbstractString; force::Bool = false)
     key = _resolve(cache, src)
@@ -424,8 +424,8 @@ function mv(
 end
 
 # Default-cache forms
-mv(src, dest::AbstractString; kwargs...) = mv(default_filecache(), src, dest; kwargs...)
-mv(src, dest::DataCache; kwargs...) = mv(default_filecache(), src, dest; kwargs...)
+mv(src, dest::AbstractString; kwargs...) = mv(active_autocache(), src, dest; kwargs...)
+mv(src, dest::DataCache; kwargs...) = mv(active_autocache(), src, dest; kwargs...)
 
 # =============================================================================
 # cp — copy assets to another cache
@@ -450,7 +450,7 @@ cache is allowed and produces a distinct new entry.
 - Each entry preserves its original label; returns a `Vector{CacheEntry}` of new entries
 - `force=false` — apply to all entries
 
-If `src_cache` is omitted, `default_filecache()` is used as the source.
+If `src_cache` is omitted, `active_autocache()` is used as the source.
 """
 function cp(
         src_cache::DataCache, src, dest_cache::DataCache;
@@ -484,8 +484,8 @@ function cp(
 end
 
 # Default-cache forms
-cp(src, dest_cache::DataCache; kwargs...) = cp(default_filecache(), src, dest_cache; kwargs...)
-cp(srcs::AbstractVector, dest_cache::DataCache; kwargs...) = cp(default_filecache(), srcs, dest_cache; kwargs...)
+cp(src, dest_cache::DataCache; kwargs...) = cp(active_autocache(), src, dest_cache; kwargs...)
+cp(srcs::AbstractVector, dest_cache::DataCache; kwargs...) = cp(active_autocache(), srcs, dest_cache; kwargs...)
 
 # =============================================================================
 # purge! — bulk deletion with rich criteria
@@ -496,7 +496,7 @@ cp(srcs::AbstractVector, dest_cache::DataCache; kwargs...) = cp(default_filecach
 
 Bulk-delete cache entries matching the given criteria. All standard `ls` filtering
 keyword arguments are accepted to scope which entries are candidates for purging.
-When `cache` is omitted, the active default cache is used (see `default_filecache()`).
+When `cache` is omitted, the active default cache is used (see `active_autocache()`).
 
 All removals are batched into a single index rewrite.
 
@@ -673,6 +673,6 @@ function purge!(
     return cache
 end
 
-purge!(; kwargs...)::DataCache = purge!(default_filecache(); kwargs...)
+purge!(; kwargs...)::DataCache = purge!(active_autocache(); kwargs...)
 
 end # module CacheAssets

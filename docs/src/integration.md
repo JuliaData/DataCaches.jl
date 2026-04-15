@@ -208,7 +208,7 @@ explicit `cache` to `set_autocaching!`.
 
 1. User-explicit: `set_autocaching!(true; cache=x)` → always uses `x`
 2. `package_cache` → used when no explicit user cache was set
-3. [`default_filecache()`](@ref) → final fallback
+3. [`active_autocache()`](@ref) → final fallback (lazy)
 
 ```julia
 module BioSearch
@@ -349,7 +349,7 @@ property of the JSON format, not a bug.
 |---|---|---|---|
 | Package owns a scratch store | Yes | No | Yes |
 | Functions support `set_autocaching!` | No | Yes | Yes |
-| Default store when user omits `cache=` | N/A | `default_filecache()` | Package's own store |
+| Default store when user omits `cache=` | N/A | `active_autocache()` | Package's own store |
 | User can override to a different store | N/A | Yes | Yes |
 | Results isolated from other packages | Yes | No | Yes |
 | Cache removed with package on `Pkg.gc()` | Yes | N/A | Yes |

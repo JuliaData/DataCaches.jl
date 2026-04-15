@@ -19,7 +19,7 @@ using DataCaches, PaleobiologDB
 ENV["JULIA_DEBUG"] = "DataCaches"
 
 dc = DataCache(:project1)
-set_default_filecache!(dc)
+set_active_autocache!(dc)
 
 # First call: runs the query and stores the result
 occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")
@@ -43,7 +43,7 @@ Since `@filecache` is generic, it works equally well with any third-party librar
 using DataCaches, GBIF2
 
 dc = DataCache(:biodiversity)
-set_default_filecache!(dc)
+set_active_autocache!(dc)
 
 occs = @filecache GBIF2.occurrence_search(taxonKey = 212, limit = 300)
 # Next session: same call with `@filecache` returns from disk, no network request
@@ -172,12 +172,10 @@ using DataCaches, PaleobiologyDB
 # Optional: track caching operations in debug logs
 ENV["JULIA_DEBUG"] = "DataCaches"
 
-# Enable autocaching, using the default cache
+# Enable autocaching, using the active autocache store
 set_autocaching!(true)
 
-# If we do not want to rely on the default cache, 
-# "`:_DEFAULT`", as the above does, we can open a project 
-# silo:
+# To use a specific project cache instead of the autocache store:
 # dc = DataCache(:project1)
 # set_autocaching!(true; cache = dc)
 
@@ -245,7 +243,7 @@ The wrapper body has three moving parts:
 #### Package-owned default cache
 
 By default, when the user calls `set_autocaching!(true)` without an explicit `cache`
-argument, results go to the shared `default_filecache()`.
+argument, results go to `active_autocache()` (the shared autocache store).
 If your package should instead write to its own module-namespace package silo by default — while
 still letting the user override with `set_autocaching!(true; cache=x)` — pass a
 `package_cache` kwarg to `autocache`:
@@ -280,7 +278,7 @@ Store resolution priority:
 
 1. **User-explicit** — `set_autocaching!(true; cache=x)` → always `x`
 2. **`package_cache`** — used when no explicit user cache was set
-3. **`default_filecache()`** — final fallback
+3. **`active_autocache()`** — final fallback (lazy)
 
 See the Library Integration guide in the [full documentation](https://juliadata.org/DataCaches.jl/)
 for complete working examples of all three patterns (private cache, user-controlled

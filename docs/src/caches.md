@@ -14,7 +14,7 @@ The scratchspace organises stores into subdirectories by kind:
 ~/.julia/scratchspaces/<DataCaches-UUID>/
   caches/
     user/
-      _DEFAULT/             ← DataCache() / DataCache(:_DEFAULT) default store
+      _AUTOCACHE/          ← active_autocache() store
       <name>/              ← DataCache(:name) stores
     module/<uuid>/<key>/   ← scratch_datacache!(uuid, key) stores
 ```
@@ -37,9 +37,9 @@ DataCaches.Caches.pwd()
 DataCaches.Caches.pwd(:myproject)
 # → ".../c1455f2b-.../caches/user/myproject"
 
-# Path to the default store (respects DATACACHES_DEFAULT_STORE env var)
-DataCaches.Caches.defaultstore()
-# → ".../c1455f2b-.../caches/user/_DEFAULT"
+# Path to the active autocache store (respects DATACACHES_AUTOCACHE_STORE env var)
+DataCaches.Caches.autocachestore()
+# → ".../c1455f2b-.../caches/user/_AUTOCACHE"
 
 # Listing of the caches directory root (default)
 DataCaches.Caches.ls()
@@ -47,7 +47,7 @@ DataCaches.Caches.ls()
 
 # List user stores (DataCache(:name))
 DataCaches.Caches.ls(:user)
-# → [:_DEFAULT, :myproject, :taxonomy, :archived_results]
+# → [:_AUTOCACHE, :myproject, :taxonomy, :archived_results]
 
 # List module-scoped stores (scratch_datacache!(uuid, key))
 DataCaches.Caches.ls(:module)
@@ -102,7 +102,7 @@ arbitrary `DataCache` objects.
 |---|---|
 | `Caches.pwd()` | Scratchspace root path |
 | `Caches.pwd(:name)` | Path to a user named store (`caches/user/<name>`) |
-| `Caches.defaultstore()` | Path to the default store (`caches/user/_DEFAULT`) |
+| `Caches.autocachestore()` | Path to the active autocache store (`caches/user/_AUTOCACHE`) |
 | `Caches.ls()` | Returns `Vector{Symbol}` — caches root listing (same as `ls(:root)`) |
 | `Caches.ls(:root)` | Returns `Vector{Symbol}` — top-level caches subdirs (e.g. `[:user, :module]`) |
 | `Caches.ls(:user)` | Returns `Vector{Symbol}` — names of `DataCache(:name)` stores |
