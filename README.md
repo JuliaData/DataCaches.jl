@@ -170,26 +170,20 @@ using DataCaches, PaleobiologDB
 # Optional: show caching operations in debug logs
 ENV["JULIA_DEBUG"] = "DataCaches"
 
-# Here we use a siloed project specific cache.
-dc = DataCache(:myproject)
-set_active_autocache!(dc)
-
-# If we did not run `set_active_autocache!` above,
-# the active autocache store will be used in all
-# the patterns below:
-# dc = DataCaches.active_autocache()
-
 # --- Pattern 1: @filecache — works with any function, no setup beyond the cache ---
 occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")  # fetches + stores
 occs = @filecache pbdb_occurrences(base_name = "Canidae", show = "full")  # from cache
 
 # --- Pattern 2: explicit dict-style — full control over labels and timing ---
+# Here we use a siloed project specific cache.
+dc = DataCache(:myproject)
 dc["canidae_occs"] = pbdb_occurrences(base_name = "Canidae", show = "full")
 occs = dc["canidae_occs"]
 
 # --- Pattern 3: set_autocaching! — zero call-site changes, but requires
 #     instrumented or wrapped functions (see Pattern 3 section below) ---
-set_autocaching!(true; cache = dc)
+set_autocaching!(true)
+# can also do: set_autocaching!(true; cache = DataCache(:myproject))
 occs = pbdb_occurrences(base_name = "Canidae", show = "full")   # fetches + stores
 occs = pbdb_occurrences(base_name = "Canidae", show = "full")   # from cache, unchanged call
 set_autocaching!(false)
